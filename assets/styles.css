@@ -1,0 +1,832 @@
+/* ===================================================================
+   DASHBOARD INSTITUCIONAL - MINISTERIO DE MINAS Y ENERGÍA COLOMBIA
+   Estilos CSS para aplicación Dash - Actualizado para panel de consulta
+   =================================================================== */
+
+/* IMPORTAR FUENTES */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Poppins:wght@300;400;500;600;700;800&display=swap');
+
+/* RESET Y BASE */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    background: #FFFFFF !important;
+    min-height: 100vh;
+    color: #1F2937 !important;
+}
+
+/* ESTILOS PARA SIDEBAR UNIVERSAL Y NAVEGACIÓN */
+.nav-link-custom {
+    color: #6B7280 !important;
+    padding: 12px 16px !important;
+    border-radius: 10px !important;
+    transition: all 0.3s ease !important;
+    margin-bottom: 8px !important;
+    text-decoration: none !important;
+    border: 1px solid transparent !important;
+    display: flex !important;
+    align-items: center !important;
+}
+
+.nav-link-custom:hover {
+    background: linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%) !important;
+    color: #1E3A8A !important;
+    transform: translateX(5px) !important;
+    border-color: #E5E7EB !important;
+}
+
+.nav-link-custom.active {
+    background: linear-gradient(135deg, #1E3A8A 0%, #0369A1 100%) !important;
+    color: #FFFFFF !important;
+    font-weight: 600 !important;
+    transform: translateX(5px) !important;
+    box-shadow: 0 4px 12px rgba(30, 58, 138, 0.3) !important;
+}
+
+/* SIDEBAR DESPLEGABLE */
+.nav-link-sidebar {
+    color: #6B7280 !important;
+    padding: 10px 15px !important;
+    border-radius: 8px !important;
+    transition: all 0.3s ease !important;
+    margin-bottom: 5px !important;
+    text-decoration: none !important;
+    border: 1px solid transparent !important;
+    display: flex !important;
+    align-items: center !important;
+    font-size: 0.9rem !important;
+}
+
+.nav-link-sidebar:hover {
+    background: linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%) !important;
+    color: #1E3A8A !important;
+    border-color: #E5E7EB !important;
+}
+
+.nav-link-sidebar.active {
+    background: linear-gradient(135deg, #1E3A8A 0%, #0369A1 100%) !important;
+    color: #FFFFFF !important;
+    font-weight: 600 !important;
+    box-shadow: 0 2px 8px rgba(30, 58, 138, 0.3) !important;
+}
+
+/* CONTENEDOR PRINCIPAL */
+._dash-renderer {
+    background: #F8F9FA !important;
+}
+
+.main-container {
+    background: #FFFFFF !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    overflow-x: hidden !important;
+    overflow-y: visible !important;
+    border: 1px solid #E9ECEF !important;
+}
+
+/* HEADER INSTITUCIONAL */
+.hero-header {
+    background: #FFFFFF !important;
+    color: #1F2937 !important;
+    padding: 3rem 2rem !important;
+    text-align: center !important;
+    position: relative !important;
+    overflow: hidden !important;
+    border-bottom: 3px solid #1E3A8A !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05) !important;
+}
+
+.hero-header::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: none;
+    opacity: 0;
+}
+
+.hero-title {
+    font-family: 'Poppins', sans-serif !important;
+    font-size: 3rem !important;
+    font-weight: 700 !important;
+    margin-bottom: 1rem !important;
+    text-shadow: none !important;
+    position: relative !important;
+    z-index: 2 !important;
+    color: #1F2937 !important;
+}
+
+.hero-subtitle {
+    font-size: 1.25rem !important;
+    font-weight: 500 !important;
+    opacity: 0.8 !important;
+    position: relative !important;
+    z-index: 2 !important;
+    color: #6B7280 !important;
+}
+
+/* NAVBAR INSTITUCIONAL */
+.navbar {
+    background: #FFFFFF !important;
+    backdrop-filter: none !important;
+    border: none !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    border-bottom: 1px solid #E5E7EB !important;
+}
+
+.navbar-brand {
+    font-family: 'Poppins', sans-serif !important;
+    font-weight: 700 !important;
+    font-size: 1.5rem !important;
+    color: #1E3A8A !important;
+}
+
+.nav-link {
+    font-weight: 500 !important;
+    color: #374151 !important;
+    border-radius: 6px !important;
+    padding: 0.75rem 1.5rem !important;
+    margin: 0 0.25rem !important;
+    transition: all 0.3s ease !important;
+}
+
+.nav-link:hover {
+    background: #F3F4F6 !important;
+    color: #1E3A8A !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+/* CARDS INSTITUCIONALES */
+.card {
+    background: #FFFFFF !important;
+    backdrop-filter: none !important;
+    border: 1px solid #E5E7EB !important;
+    border-radius: 8px !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+    transition: all 0.3s ease !important;
+    overflow: visible !important;
+}
+
+.card .card-body {
+    margin-bottom: 1rem !important;
+}
+
+.card:hover {
+    transform: none !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15) !important;
+    border-color: #D1D5DB !important;
+}
+
+.card-header {
+    background: #F9FAFB !important;
+    border-bottom: 1px solid #E5E7EB !important;
+    padding: 1.5rem !important;
+    font-weight: 600 !important;
+    color: #1F2937 !important;
+}
+
+.card-body {
+    padding: 1.5rem !important;
+    background: #FFFFFF !important;
+}
+
+/* BOTONES INSTITUCIONALES */
+.btn {
+    border-radius: 6px !important;
+    font-weight: 500 !important;
+    padding: 0.75rem 1.5rem !important;
+    transition: all 0.3s ease !important;
+    border: 1px solid transparent !important;
+}
+
+.btn-primary {
+    background: #1E3A8A !important;
+    border-color: #1E3A8A !important;
+    color: #FFFFFF !important;
+}
+
+.btn-primary:hover {
+    background: #1E40AF !important;
+    border-color: #1E40AF !important;
+    transform: none !important;
+    box-shadow: 0 2px 4px rgba(30, 58, 138, 0.2) !important;
+}
+
+.btn-secondary {
+    background: #6B7280 !important;
+    border-color: #6B7280 !important;
+    color: #FFFFFF !important;
+}
+
+.btn-secondary:hover {
+    background: #4B5563 !important;
+    border-color: #4B5563 !important;
+}
+
+.btn-outline-primary {
+    color: #1E3A8A !important;
+    border-color: #1E3A8A !important;
+    background: transparent !important;
+}
+
+.btn-outline-primary:hover {
+    background: #1E3A8A !important;
+    color: #FFFFFF !important;
+}
+
+/* BADGES INSTITUCIONALES */
+.badge {
+    font-weight: 500 !important;
+    padding: 0.5rem 0.75rem !important;
+    border-radius: 6px !important;
+    font-size: 0.875rem !important;
+}
+
+/* TABLAS */
+.table {
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+    background: #FFFFFF !important;
+    border-radius: 8px !important;
+    overflow: hidden !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
+}
+
+.table th {
+    background: linear-gradient(135deg, #1E3A8A 0%, #1E40AF 100%) !important;
+    color: #FFFFFF !important;
+    font-weight: 600 !important;
+    border-bottom: none !important;
+    padding: 1rem !important;
+    text-transform: uppercase !important;
+    font-size: 0.875rem !important;
+    letter-spacing: 0.5px !important;
+}
+
+.table td {
+    padding: 1rem !important;
+    border-bottom: 1px solid #F3F4F6 !important;
+    color: #1F2937 !important;
+    font-size: 0.95rem !important;
+}
+
+.table-striped tbody tr:nth-of-type(odd) {
+    background: #F8FAFC !important;
+}
+
+.table-hover tbody tr:hover {
+    background: #E0F2FE !important;
+    transform: translateY(-1px) !important;
+    transition: all 0.2s ease !important;
+}
+
+/* FORMULARIOS */
+.form-control {
+    border: 1px solid #D1D5DB !important;
+    border-radius: 6px !important;
+    padding: 0.75rem !important;
+    font-size: 1rem !important;
+    transition: all 0.3s ease !important;
+    background: #FFFFFF !important;
+}
+
+.form-control:focus {
+    border-color: #1E3A8A !important;
+    box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1) !important;
+    outline: none !important;
+}
+
+.form-label {
+    font-weight: 500 !important;
+    color: #374151 !important;
+    margin-bottom: 0.5rem !important;
+}
+
+/* DROPDOWNS */
+.dropdown-menu {
+    border: 1px solid #E5E7EB !important;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+    padding: 0.5rem !important;
+    background: #FFFFFF !important;
+    z-index: 1050 !important;
+}
+
+/* DASH DROPDOWNS Y SELECTS */
+.dash-dropdown .Select {
+    z-index: 999 !important;
+}
+
+.dash-dropdown .Select-menu-outer {
+    z-index: 1000 !important;
+    max-height: 200px !important;
+    overflow-y: auto !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+    border: 1px solid #D1D5DB !important;
+    border-radius: 8px !important;
+}
+
+.dash-dropdown .Select-option {
+    padding: 8px 12px !important;
+    font-size: 14px !important;
+    color: #374151 !important;
+}
+
+.dash-dropdown .Select-option:hover {
+    background-color: #F3F4F6 !important;
+    color: #1E3A8A !important;
+}
+
+/* PANEL DE CONSULTA */
+.card-body .row {
+    overflow: visible !important;
+}
+
+.card-body .col-lg-3,
+.card-body .col-md-6,
+.card-body .col-sm-12 {
+    overflow: visible !important;
+    z-index: auto !important;
+}
+
+/* DATE PICKERS Y CALENDARIOS */
+.SingleDatePicker,
+.DateRangePicker {
+    position: relative !important;
+    z-index: 1000 !important;
+}
+
+.DateInput_input {
+    border: 1px solid #D1D5DB !important;
+    border-radius: 6px !important;
+    padding: 8px 12px !important;
+    font-size: 14px !important;
+}
+
+.DateInput_input:focus {
+    border-color: #1E3A8A !important;
+    box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.1) !important;
+    outline: none !important;
+}
+
+.DayPicker {
+    z-index: 1001 !important;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15) !important;
+    border-radius: 8px !important;
+    border: 1px solid #E5E7EB !important;
+}
+
+/* CONTENEDORES CON OVERFLOW VISIBLE */
+.container-fluid,
+.row,
+.col,
+.col-12,
+.col-md-6,
+.col-lg-3,
+.col-sm-12 {
+    overflow: visible !important;
+}
+
+.dropdown-item {
+    border-radius: 4px !important;
+    padding: 0.5rem 1rem !important;
+    color: #374151 !important;
+    transition: all 0.2s ease !important;
+}
+
+.dropdown-item:hover {
+    background: #F3F4F6 !important;
+    color: #1E3A8A !important;
+}
+
+/* ALERTAS */
+.alert {
+    border-radius: 8px !important;
+    padding: 1rem 1.5rem !important;
+    margin-bottom: 1rem !important;
+    border: 1px solid transparent !important;
+}
+
+.alert-success {
+    background: #F0FDF4 !important;
+    color: #047857 !important;
+    border-color: #BBF7D0 !important;
+}
+
+.alert-info {
+    background: #EFF6FF !important;
+    color: #0369A1 !important;
+    border-color: #BFDBFE !important;
+}
+
+.alert-warning {
+    background: #FFFBEB !important;
+    color: #D97706 !important;
+    border-color: #FED7AA !important;
+}
+
+.alert-danger {
+    background: #FEF2F2 !important;
+    color: #DC2626 !important;
+    border-color: #FECACA !important;
+}
+
+/* PROGRESS BARS */
+.progress {
+    height: 0.5rem !important;
+    border-radius: 0.25rem !important;
+    background: #F3F4F6 !important;
+}
+
+.progress-bar {
+    background: #1E3A8A !important;
+    border-radius: 0.25rem !important;
+}
+
+/* MODALES */
+.modal-content {
+    border-radius: 12px !important;
+    border: 1px solid #E5E7EB !important;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1) !important;
+}
+
+.modal-header {
+    background: #F9FAFB !important;
+    border-bottom: 1px solid #E5E7EB !important;
+    padding: 1.5rem !important;
+}
+
+.modal-body {
+    padding: 1.5rem !important;
+}
+
+.modal-footer {
+    background: #F9FAFB !important;
+    border-top: 1px solid #E5E7EB !important;
+    padding: 1.5rem !important;
+}
+
+/* ANIMACIONES SUTILES */
+.animate-fade-in {
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-slide-in {
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from { transform: translateX(-20px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+/* ICONOS */
+.fas, .far, .fab {
+    margin-right: 0.5rem;
+}
+
+/* UTILIDADES DE ESPACIADO */
+.p-institutional {
+    padding: 1.5rem !important;
+}
+
+.m-institutional {
+    margin: 1rem !important;
+}
+
+.mb-institutional {
+    margin-bottom: 1.5rem !important;
+}
+
+.mt-institutional {
+    margin-top: 1.5rem !important;
+}
+
+/* COLORES DE TEXTO INSTITUCIONALES */
+.text-primary-institutional {
+    color: #1E3A8A !important;
+}
+
+.text-secondary-institutional {
+    color: #6B7280 !important;
+}
+
+.text-success-institutional {
+    color: #047857 !important;
+}
+
+.text-warning-institutional {
+    color: #D97706 !important;
+}
+
+.text-danger-institutional {
+    color: #DC2626 !important;
+}
+
+/* FONDOS INSTITUCIONALES */
+.bg-primary-institutional {
+    background-color: #1E3A8A !important;
+    color: #FFFFFF !important;
+}
+
+.bg-light-institutional {
+    background-color: #F9FAFB !important;
+    color: #1F2937 !important;
+}
+
+.bg-white-institutional {
+    background-color: #FFFFFF !important;
+    border: 1px solid #E5E7EB !important;
+}
+
+/* RESPONSIVE DESIGN */
+@media (max-width: 768px) {
+    .hero-title {
+        font-size: 2rem !important;
+    }
+    
+    .hero-subtitle {
+        font-size: 1rem !important;
+    }
+    
+    .hero-header {
+        padding: 2rem 1rem !important;
+    }
+    
+    .card {
+        margin-bottom: 1rem !important;
+    }
+    
+    .btn {
+        padding: 0.5rem 1rem !important;
+        font-size: 0.875rem !important;
+    }
+}
+
+@media (max-width: 576px) {
+    .hero-title {
+        font-size: 1.75rem !important;
+    }
+    
+    .navbar-brand {
+        font-size: 1.25rem !important;
+    }
+    
+    .nav-link {
+        padding: 0.5rem 1rem !important;
+    }
+}
+
+/* ESTILOS ESPECÍFICOS PARA PLOTLY/DASH */
+.dash-table-container {
+    border: 1px solid #E5E7EB !important;
+    border-radius: 12px !important;
+    overflow: hidden !important;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important;
+}
+
+.dash-spreadsheet-container {
+    background: #FFFFFF !important;
+}
+
+.dash-spreadsheet-container .dash-spreadsheet-inner {
+    border: none !important;
+}
+
+/* Headers de tablas Dash con estilo profesional */
+.dash-header {
+    background: linear-gradient(135deg, #1E3A8A 0%, #1E40AF 100%) !important;
+    color: #FFFFFF !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.5px !important;
+}
+
+/* Filas de datos con hover mejorado */
+.dash-cell div.dash-cell-value {
+    color: #1F2937 !important;
+    font-size: 0.95rem !important;
+}
+
+/* Filtros de tablas */
+.dash-filter {
+    background: #F8FAFC !important;
+    border: 1px solid #E5E7EB !important;
+    border-radius: 6px !important;
+    padding: 0.5rem !important;
+}
+
+/* GRÁFICOS Y MAPAS */
+.plotly-graph-div {
+    border-radius: 8px !important;
+    border: 1px solid #E5E7EB !important;
+    overflow: hidden !important;
+}
+
+/* SIDEBAR (SI SE USA) */
+.sidebar {
+    background: #F8FAFC !important;
+    border-right: 1px solid #E5E7EB !important;
+    padding: 1.5rem !important;
+}
+
+.sidebar .nav-link {
+    color: #374151 !important;
+    padding: 0.75rem 1rem !important;
+    border-radius: 6px !important;
+    margin-bottom: 0.25rem !important;
+}
+
+.sidebar .nav-link:hover {
+    background: #F3F4F6 !important;
+    color: #1E3A8A !important;
+}
+
+.sidebar .nav-link.active {
+    background: #1E3A8A !important;
+    color: #FFFFFF !important;
+}
+
+/* FOOTER INSTITUCIONAL */
+.footer {
+    background: #F9FAFB !important;
+    border-top: 1px solid #E5E7EB !important;
+    padding: 2rem 0 !important;
+    margin-top: 3rem !important;
+}
+
+.footer p {
+    color: #6B7280 !important;
+    margin-bottom: 0 !important;
+}
+
+/* LOADING SPINNERS */
+.loading-spinner {
+    display: inline-block;
+    width: 1.5rem;
+    height: 1.5rem;
+    border: 3px solid #F3F4F6;
+    border-radius: 50%;
+    border-top-color: #1E3A8A;
+    animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* TOOLTIPS */
+.tooltip {
+    background: #1F2937 !important;
+    color: #FFFFFF !important;
+    padding: 0.5rem 1rem !important;
+    border-radius: 6px !important;
+    font-size: 0.875rem !important;
+}
+
+/* BREADCRUMBS */
+.breadcrumb {
+    background: #F9FAFB !important;
+    border-radius: 6px !important;
+    padding: 0.75rem 1rem !important;
+}
+
+.breadcrumb-item {
+    color: #6B7280 !important;
+}
+
+.breadcrumb-item.active {
+    color: #1F2937 !important;
+    font-weight: 500 !important;
+}
+
+/* OPTIMIZACIONES FINALES */
+.container-fluid {
+    padding: 0 !important;
+}
+
+.row {
+    margin: 0 !important;
+}
+
+.col, .col-auto, .col-1, .col-2, .col-3, .col-4, .col-5, .col-6,
+.col-7, .col-8, .col-9, .col-10, .col-11, .col-12 {
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+}
+
+/* ESTILOS PARA COMPONENTES DASH ESPECÍFICOS */
+._dash-undo-redo {
+    display: none !important;
+}
+
+.Select-control {
+    border: 1px solid #D1D5DB !important;
+    border-radius: 6px !important;
+}
+
+.Select-control:hover {
+    border-color: #1E3A8A !important;
+}
+
+.Select-menu-outer {
+    border: 1px solid #E5E7EB !important;
+    border-radius: 6px !important;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* ESTILOS PARA ACORDEONES DEL SIDEBAR */
+.accordion {
+    --bs-accordion-color: #6B7280 !important;
+    --bs-accordion-bg: transparent !important;
+    --bs-accordion-border-color: transparent !important;
+    --bs-accordion-border-radius: 8px !important;
+    --bs-accordion-inner-border-radius: 6px !important;
+    --bs-accordion-btn-padding-x: 0.75rem !important;
+    --bs-accordion-btn-padding-y: 0.5rem !important;
+    --bs-accordion-btn-color: #6B7280 !important;
+    --bs-accordion-btn-bg: transparent !important;
+    --bs-accordion-btn-icon-width: 1rem !important;
+    --bs-accordion-btn-icon-transform: rotate(-90deg) !important;
+    --bs-accordion-btn-icon-transition: transform 0.2s ease-in-out !important;
+    --bs-accordion-btn-active-icon-transform: rotate(0deg) !important;
+    --bs-accordion-btn-focus-border-color: transparent !important;
+    --bs-accordion-btn-focus-box-shadow: none !important;
+    --bs-accordion-body-padding-x: 0 !important;
+    --bs-accordion-body-padding-y: 0.5rem !important;
+    --bs-accordion-active-color: #1E3A8A !important;
+    --bs-accordion-active-bg: transparent !important;
+}
+
+.accordion-button {
+    font-size: 0.9rem !important;
+    font-weight: 500 !important;
+    border: none !important;
+    border-radius: 6px !important;
+    transition: all 0.3s ease !important;
+}
+
+.accordion-button:hover {
+    background: linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%) !important;
+    color: #1E3A8A !important;
+}
+
+.accordion-button:not(.collapsed) {
+    background: linear-gradient(135deg, #EBF8FF 0%, #DBEAFE 100%) !important;
+    color: #1E3A8A !important;
+    font-weight: 600 !important;
+    box-shadow: none !important;
+}
+
+.accordion-button::after {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%236B7280'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e") !important;
+}
+
+.accordion-button:not(.collapsed)::after {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%231E3A8A'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e") !important;
+}
+
+.accordion-collapse {
+    border: none !important;
+}
+
+.accordion-body {
+    background: transparent !important;
+    padding: 0.5rem 0 !important;
+}
+
+/* ESTILOS ESPECÍFICOS PARA SUBMENÚS */
+.accordion .accordion {
+    margin-top: 0.5rem !important;
+}
+
+.accordion .accordion .accordion-button {
+    font-size: 0.85rem !important;
+    padding-left: 1.5rem !important;
+    color: #6B7280 !important;
+}
+
+.accordion .accordion .accordion-button:hover {
+    background: linear-gradient(135deg, #F3F4F6 0%, #E5E7EB 100%) !important;
+}
+
+.accordion .accordion .accordion-button:not(.collapsed) {
+    background: linear-gradient(135deg, #F0F9FF 0%, #E0F2FE 100%) !important;
+    color: #0369A1 !important;
+}
