@@ -202,8 +202,8 @@ def get_rio_options(region=None):
         print(f"Error obteniendo opciones de Río: {e}")
         return []
 
-regiones = get_region_options()
-rios = get_rio_options()
+regiones = []  # Se cargarán dinámicamente
+rios = []      # Se cargarán dinámicamente
 
 layout = html.Div([
     # Sidebar desplegable
@@ -275,8 +275,7 @@ def crear_panel_controles():
                     ], className="fw-bold mb-2 d-flex align-items-center"),
                     dcc.Dropdown(
                         id="region-dropdown",
-                        options=[{"label": "� Todas las regiones", "value": "__ALL_REGIONS__"}] + 
-                               [{"label": f"🏔️ {r}", "value": r} for r in regiones],
+                        options=[{"label": "🌍 Todas las regiones", "value": "__ALL_REGIONS__"}],
                         placeholder="Selecciona una región hidrológica...",
                         className="form-control-modern mb-0",
                         style={"fontSize": "0.95rem"}
@@ -290,7 +289,7 @@ def crear_panel_controles():
                     ], className="fw-bold mb-2 d-flex align-items-center"),
                     dcc.Dropdown(
                         id="rio-dropdown",
-                        options=[{"label": f"🌊 {r}", "value": r} for r in rios],
+                        options=[],  # Se cargarán dinámicamente según la región
                         placeholder="Selecciona un río para consultar...",
                         className="form-control-modern mb-0",
                         style={"fontSize": "0.95rem"}
@@ -2758,3 +2757,19 @@ def create_stats_summary(data):
     ])
 
 # NOTA: Los callbacks de tabla de embalses fueron eliminados para implementación directa en layout
+
+# Callback para cargar opciones de regiones dinámicamente
+@callback(
+    Output('region-dropdown', 'options'),
+    Input('region-dropdown', 'id')  # Se ejecuta al cargar la página
+)
+def load_region_options(_):
+    """Carga las opciones de regiones dinámicamente para evitar bloqueos durante la importación."""
+    try:
+        regiones_disponibles = get_region_options()
+        options = [{"label": "🌍 Todas las regiones", "value": "__ALL_REGIONS__"}]
+        options += [{"label": f"🏔️ {r}", "value": r} for r in regiones_disponibles]
+        return options
+    except Exception as e:
+        print(f"Error cargando opciones de regiones: {e}")
+        return [{"label": "🌍 Todas las regiones", "value": "__ALL_REGIONS__"}]
