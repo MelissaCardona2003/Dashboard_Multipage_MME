@@ -16,6 +16,24 @@ Dashboard interactivo desarrollado en Python/Dash para el análisis integral y v
 - 🎨 **Interfaz Moderna**: Diseño responsive con sidebar desplegable estilo VSCode
 - ⚡ **Tiempo Real**: Indicadores de carga y datos sincronizados automáticamente
 - 🔍 **Filtros Avanzados**: Sistema de consultas por región, río, fechas y métricas
+- 📋 **KPI Cards Inteligentes**: Tarjetas métricas centradas con datos de participación porcentual
+- 🔄 **Filtros Sincronizados**: Sistema completo de filtros dinámicos en tiempo real
+
+## 🆕 Últimas Mejoras (Septiembre 2025)
+
+### 💧 Mejoras en Análisis Hidrológico
+- ✅ **KPI Cards Optimizadas**: Implementación de tarjetas "Aportes % por Sistema" centradas y responsivas
+- ✅ **Filtros Dinámicos**: Sistema completo de filtros por región, río y fechas que se sincronizan en todas las vistas
+- ✅ **Simplificación de UI**: Eliminación de tarjetas redundantes para mejor claridad visual
+- ✅ **Debugging Mejorado**: Sistema de logs detallado para diagnóstico de datos de la API XM
+- ✅ **Manejo de Errores**: Mensajes informativos cuando ríos no tienen datos disponibles
+- ✅ **Validación de Datos**: Verificación automática de columnas y estructura de datos de PorcApor
+
+### 🔧 Mejoras Técnicas
+- ✅ **API Integration**: Integración mejorada con la API oficial de XM para datos de PorcApor
+- ✅ **Error Handling**: Manejo robusto de errores de conectividad y datos faltantes
+- ✅ **Performance**: Optimización de consultas y carga de datos hidrológicos
+- ✅ **UX/UI**: Diseño centrado y consistente en todas las vistas de gráficos de línea
 
 ## 🚀 Funcionalidades Detalladas
 
@@ -42,12 +60,17 @@ Dashboard interactivo desarrollado en Python/Dash para el análisis integral y v
 - **Indicadores de Carga**: Spinner visual durante consultas de datos
 
 ### 💧 Análisis Hidrológico Integral
-- **Monitoreo de Caudales**: Seguimiento en tiempo real de ríos y afluentes
-- **Gestión de Embalses**: Niveles, capacidades útiles y porcentajes de llenado
-- **Análisis de Aportes**: Caudales de entrada y análisis de tendencias hídricas
+- **Monitoreo de Caudales**: Seguimiento en tiempo real de ríos y afluentes con datos de XM
+- **Gestión de Embalses**: Niveles, capacidades útiles y porcentajes de llenado por región
+- **Análisis de Aportes**: Caudales de entrada y participación porcentual por sistema
 - **Filtros Especializados**: Por región hidrológica, río específico y rangos de fecha
-- **Visualizaciones Hídricas**: Gráficos especializados para datos hidrológicos
+- **Visualizaciones Hídricas**: Gráficos especializados con líneas temporales interactivas
 - **Tablas Dinámicas**: Información detallada de embalses con formateo condicional
+- **KPI Cards Inteligentes**: Tarjetas métricas con "Aportes % por Sistema" centradas y responsivas
+- **Datos Filtrados**: Sistema completo de filtros que se sincroniza entre todas las vistas
+- **Vista Nacional**: Panorámica completa con desglose por regiones hidrológicas
+- **Vista Regional**: Análisis específico con datos agregados por región
+- **Vista Individual**: Seguimiento detallado de ríos específicos con métricas de participación
 - **Predicciones Hídricas**: Análisis de disponibilidad futura de recursos hídricos
 
 ### 🌱 Dashboards Especializados por Fuente
@@ -548,4 +571,10 @@ SOFTWARE.
 
 **🚀 Dashboard Multipage MME - Impulsando el Futuro Energético de Colombia**
 
-*Última actualización: Septiembre 2024 | Versión: 2.0.0*
+*Última actualización: Septiembre 2025 | Versión: 2.1.0*
+
+### 📊 Changelog Reciente
+- **v2.1.0 (Sep 2025)**: Mejoras en análisis hidrológico con KPI cards optimizadas y filtros dinámicos
+- **v2.0.0 (Sep 2024)**: Lanzamiento de dashboard multipage con 8 módulos especializados
+- **v1.5.0 (Ago 2024)**: Integración completa con API XM y 190+ métricas
+- **v1.0.0 (Jul 2024)**: Primera versión estable con análisis geoespacial

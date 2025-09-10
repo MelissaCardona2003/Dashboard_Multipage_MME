@@ -507,7 +507,11 @@ def update_content(n_clicks, rio, start_date, end_date, region):
                     html.P("Vista panorámica nacional: Series temporales comparativas de aportes de caudal por región hidrológica. Haga clic en cualquier punto para ver el detalle agregado diario de la región. Los datos incluyen todos los ríos monitoreados en el período seleccionado, agrupados por región para análisis comparativo nacional.", className="text-center text-muted mb-3", style={"fontSize": "0.9rem"}),
                     dbc.Row([
                         dbc.Col([
-                            create_latest_value_kpi(data, "Aportes totales nacionales"),
+                            create_porcapor_kpi(start_date, end_date, region="__ALL_REGIONS__")
+                        ], md=6, className="mx-auto")
+                    ], className="mb-4 justify-content-center"),
+                    dbc.Row([
+                        dbc.Col([
                             create_total_timeline_chart(data, "Aportes totales nacionales")
                         ], md=12)
                     ]),
@@ -639,7 +643,11 @@ def update_content(n_clicks, rio, start_date, end_date, region):
                 dbc.Row([
                     dbc.Col([
                         html.H6("📈 Evolución Temporal", className="text-center mb-2"),
-                        create_latest_value_kpi(plot_df, f"Río {rio}"),
+                        dbc.Row([
+                            dbc.Col([
+                                create_porcapor_kpi(start_date, end_date, region=region, rio=rio)
+                            ], md=6, className="mx-auto")
+                        ], className="mb-4 justify-content-center"),
                         create_line_chart(plot_df)
                     ], md=7),
                     dbc.Col([
@@ -720,7 +728,11 @@ def update_content(n_clicks, rio, start_date, end_date, region):
                     html.P("Vista panorámica nacional: Series temporales comparativas de aportes de caudal por región hidrológica. Haga clic en cualquier punto para ver el detalle agregado diario de la región. Los datos incluyen todos los ríos monitoreados en el período seleccionado, agrupados por región para análisis comparativo nacional.", className="text-center text-muted mb-3", style={"fontSize": "0.9rem"}),
                     dbc.Row([
                         dbc.Col([
-                            create_latest_value_kpi(data, "Aportes totales nacionales"),
+                            create_porcapor_kpi(start_date, end_date, region="__ALL_REGIONS__")
+                        ], md=6, className="mx-auto")
+                    ], className="mb-4 justify-content-center"),
+                    dbc.Row([
+                        dbc.Col([
                             create_total_timeline_chart(data, "Aportes totales nacionales")
                         ], md=12)
                     ]),
@@ -806,7 +818,11 @@ def update_content(n_clicks, rio, start_date, end_date, region):
                     html.P(f"Serie temporal de aportes de caudal para la región {region}. La gráfica muestra la evolución diaria de los aportes energéticos de todos los ríos de esta región durante el período seleccionado.", className="text-center text-muted mb-3", style={"fontSize": "0.9rem"}),
                     dbc.Row([
                         dbc.Col([
-                            create_latest_value_kpi(region_temporal_data, f"Aportes región {region}"),
+                            create_porcapor_kpi(start_date, end_date, region=region)
+                        ], md=6, className="mx-auto")
+                    ], className="mb-4 justify-content-center"),
+                    dbc.Row([
+                        dbc.Col([
                             create_total_timeline_chart(region_temporal_data, f"Aportes región {region}")
                         ], md=12)
                     ]),
@@ -884,7 +900,11 @@ def update_content(n_clicks, rio, start_date, end_date, region):
                     html.P(f"Serie temporal agregada de aportes de caudal a nivel nacional. La gráfica muestra la evolución diaria de los aportes energéticos de todas las regiones de Colombia durante el período seleccionado.", className="text-center text-muted mb-3", style={"fontSize": "0.9rem"}),
                     dbc.Row([
                         dbc.Col([
-                            create_latest_value_kpi(national_temporal_data, "Aportes nacionales"),
+                            create_porcapor_kpi(start_date, end_date, region=None)
+                        ], md=6, className="mx-auto")
+                    ], className="mb-4 justify-content-center"),
+                    dbc.Row([
+                        dbc.Col([
                             create_total_timeline_chart(national_temporal_data, "Aportes nacionales")
                         ], md=12)
                     ]),
@@ -1390,7 +1410,11 @@ def load_default_data(start_date, end_date):
                     html.P("Vista panorámica nacional: Timeline del total nacional de aportes de caudal. Haga clic en cualquier punto para ver el desglose detallado por región para esa fecha específica. Los datos incluyen todos los ríos monitoreados en el período seleccionado, agregados por día.", className="text-center text-muted mb-3", style={"fontSize": "0.9rem"}),
                     dbc.Row([
                         dbc.Col([
-                            create_latest_value_kpi(data, "Aportes totales nacionales"),
+                            create_porcapor_kpi(start_date, end_date, region="__ALL_REGIONS__")
+                        ], md=6, className="mx-auto")
+                    ], className="mb-4 justify-content-center"),
+                    dbc.Row([
+                        dbc.Col([
                             create_total_timeline_chart(data, "Aportes totales nacionales")
                         ], md=12)
                     ]),
@@ -2474,6 +2498,211 @@ def create_latest_value_kpi(data, metric_name):
            "background": "linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%)",
            "borderRadius": "20px",
            "border": "1px solid #e9ecef",
+           "maxWidth": "500px",
+           "minHeight": "200px"
+       })
+
+def get_porcapor_data(fecha_inicio, fecha_fin):
+    """Obtener datos de la métrica PorcApor - Aportes % por río"""
+    try:
+        print(f"🔍 Consultando PorcApor desde {fecha_inicio} hasta {fecha_fin}")
+        data = objetoAPI.request_data('PorcApor', 'Rio', fecha_inicio, fecha_fin)
+        if not data.empty:
+            print(f"✅ Datos PorcApor obtenidos: {len(data)} registros")
+            return data
+        else:
+            print("⚠️ No se encontraron datos de PorcApor")
+            return pd.DataFrame()
+    except Exception as e:
+        print(f"❌ Error obteniendo datos PorcApor: {e}")
+        return pd.DataFrame()
+
+def create_porcapor_kpi(fecha_inicio, fecha_fin, region=None, rio=None):
+    """Crear tarjeta KPI específica para la métrica PorcApor (Aportes % por río)
+    
+    Args:
+        fecha_inicio: Fecha de inicio del rango
+        fecha_fin: Fecha de fin del rango  
+        region: Región para filtrar (opcional)
+        rio: Río para filtrar (opcional)
+    """
+    data = get_porcapor_data(fecha_inicio, fecha_fin)
+    
+    if data is None or data.empty:
+        return dbc.Alert("No hay datos de PorcApor disponibles", color="warning", className="mb-3")
+    
+    # DEBUG: Mostrar las columnas que se recibieron
+    print(f"🔍 DEBUG KPI: Columnas recibidas de PorcApor: {list(data.columns)}")
+    print(f"🔍 DEBUG KPI: Shape de datos: {data.shape}")
+    if not data.empty:
+        print(f"🔍 DEBUG KPI: Primeras 2 filas:")
+        print(data.head(2).to_string())
+    
+    # Verificar que tengamos las columnas necesarias
+    if 'Date' not in data.columns or 'Value' not in data.columns:
+        print(f"❌ DEBUG KPI: Faltan columnas - Date: {'Date' in data.columns}, Value: {'Value' in data.columns}")
+        return dbc.Alert(f"Faltan columnas necesarias en PorcApor. Columnas disponibles: {list(data.columns)}", color="warning", className="mb-3")
+    
+    # Filtrar por río específico si se especifica
+    if rio and rio != "__ALL__":
+        print(f"🔍 DEBUG KPI: Filtrando por río específico: {rio}")
+        data_filtered = data[data['Name'] == rio]
+        print(f"🔍 DEBUG KPI: Datos filtrados para {rio}: {len(data_filtered)} registros")
+        if data_filtered.empty:
+            print(f"❌ DEBUG KPI: No hay datos para el río {rio}")
+            available_rios = data['Name'].unique()
+            print(f"🔍 DEBUG KPI: Ríos disponibles: {sorted(available_rios)[:10]}...")
+            return dbc.Card([
+                dbc.CardBody([
+                    html.Div([
+                        html.H6("📊 Aportes % por Sistema", className="text-center mb-2"),
+                        html.Hr(),
+                        html.P(f"No hay datos de participación porcentual para el río {rio} en este período.", 
+                               className="text-center text-muted mb-2"),
+                        html.P("Este río puede estar temporalmente fuera de operación o en mantenimiento.", 
+                               className="text-center text-muted small mb-2"),
+                        html.P("💡 Selecciona otro río con datos activos como DESV. BATATAS, DESV. CHIVOR, etc.", 
+                               className="text-center text-info small")
+                    ])
+                ])
+            ], className="text-center shadow-sm mb-3")
+        title_suffix = f" - {rio}"
+    else:
+        # Filtrar por región si se especifica y no es "todas las regiones"
+        if region and region != "__ALL_REGIONS__":
+            # Agregar información de región usando el mapeo RIO_REGION
+            data['Region'] = data['Name'].map(RIO_REGION) 
+            data_filtered = data[data['Region'] == region]
+            if data_filtered.empty:
+                return dbc.Alert(f"No hay datos de PorcApor para la región {region}", color="warning", className="mb-3")
+            title_suffix = f" - {region}"
+        else:
+            data_filtered = data
+            title_suffix = ""
+    
+    # Agrupar por fecha y calcular promedio de los ríos filtrados
+    daily_avg = data_filtered.groupby('Date')['Value'].mean().reset_index()
+    daily_avg = daily_avg.sort_values('Date')
+    
+    if daily_avg.empty:
+        return dbc.Alert("No hay datos procesados de PorcApor", color="warning", className="mb-3")
+    
+    # Obtener el valor más reciente
+    latest_date = daily_avg['Date'].iloc[-1]
+    latest_value = daily_avg['Value'].iloc[-1]
+    formatted_date = pd.to_datetime(latest_date).strftime('%d/%m/%Y')
+    
+    # Formatear el valor como porcentaje
+    formatted_value = f"{latest_value:.1f}"
+    
+    # Calcular tendencia si hay al menos 2 registros
+    if len(daily_avg) >= 2:
+        previous_value = daily_avg['Value'].iloc[-2]
+        change_percent = ((latest_value - previous_value) / previous_value) * 100
+        
+        if change_percent > 0:
+            trend_icon = "bi bi-arrow-up-circle-fill"
+            trend_color = "#28a745"
+            trend_text = f"+{change_percent:.1f}%"
+            trend_bg = "#d4edda"
+        elif change_percent < 0:
+            trend_icon = "bi bi-arrow-down-circle-fill"
+            trend_color = "#dc3545"
+            trend_text = f"{change_percent:.1f}%"
+            trend_bg = "#f8d7da"
+        else:
+            trend_icon = "bi bi-dash-circle-fill"
+            trend_color = "#ffc107"
+            trend_text = "0.0%"
+            trend_bg = "#fff3cd"
+    else:
+        trend_icon = "bi bi-info-circle-fill"
+        trend_color = "#17a2b8"
+        trend_text = "N/A"
+        trend_bg = "#d1ecf1"
+
+    return dbc.Card([
+        dbc.CardBody([
+            # Contenedor principal centrado
+            html.Div([
+                # Encabezado con ícono
+                html.Div([
+                    html.I(className="bi bi-percent me-2", 
+                           style={"fontSize": "1.8rem", "color": "#28a745"}),
+                    html.H5(f"Aportes % por Sistema{title_suffix}", className="text-dark mb-0", 
+                            style={"fontSize": "1.1rem", "fontWeight": "600"})
+                ], className="d-flex align-items-center justify-content-center mb-4"),
+                
+                # Contenedor principal con valor y tendencia lado a lado
+                dbc.Row([
+                    dbc.Col([
+                        # Valor principal y unidad
+                        html.Div([
+                            html.H1(f"{formatted_value}", 
+                                    className="mb-1", 
+                                    style={
+                                        "fontWeight": "800", 
+                                        "color": "#2d3748", 
+                                        "fontSize": "3.5rem",
+                                        "lineHeight": "1",
+                                        "textAlign": "center"
+                                    }),
+                            
+                            # Unidad centrada
+                            html.P("%", 
+                                   className="text-success mb-0", 
+                                   style={
+                                       "fontSize": "1.3rem", 
+                                       "fontWeight": "500",
+                                       "textAlign": "center"
+                                   }),
+                        ], className="text-center")
+                    ], md=8),
+                    
+                    dbc.Col([
+                        # Indicador de tendencia al lado
+                        html.Div([
+                            html.Div([
+                                html.I(className=trend_icon, 
+                                       style={
+                                           "fontSize": "2rem", 
+                                           "color": trend_color,
+                                           "marginBottom": "5px"
+                                       }) if trend_icon else None,
+                                html.H5(trend_text, 
+                                        className="mb-1", 
+                                        style={
+                                            "color": trend_color, 
+                                            "fontWeight": "700",
+                                            "fontSize": "1.2rem"
+                                        }) if trend_text else None,
+                                html.Small("vs anterior",
+                                         className="text-muted",
+                                         style={"fontSize": "0.75rem"})
+                            ], className="text-center p-2 rounded-3",
+                               style={
+                                   "backgroundColor": trend_bg,
+                                   "border": f"2px solid {trend_color}20"
+                               })
+                        ], className="d-flex align-items-center justify-content-center h-100")
+                    ], md=4)
+                ], className="mb-3", align="center"),
+                
+                # Fecha centrada abajo
+                html.Div([
+                    html.I(className="bi bi-calendar-date me-2", 
+                           style={"color": "#6c757d", "fontSize": "1.1rem"}),
+                    html.Span(formatted_date, 
+                             style={"fontSize": "1rem", "color": "#6c757d"})
+                ], className="d-flex align-items-center justify-content-center")
+                
+            ], className="px-3")
+        ], className="py-4 px-4")
+    ], className="shadow border-0 mb-4 mx-auto", 
+       style={
+           "background": "linear-gradient(135deg, #e8f5e8 0%, #f0f8f0 100%)",
+           "borderRadius": "20px",
+           "border": "1px solid #28a745",
            "maxWidth": "500px",
            "minHeight": "200px"
        })
