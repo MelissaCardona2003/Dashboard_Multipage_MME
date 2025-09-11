@@ -29,13 +29,8 @@ MANIFEST
 *.manifest
 *.spec
 
-# Scripts de despliegue y configuración
-*.sh
-!start_app.sh
-!deploy.sh
-
 # Archivos de correos y comunicación
-CORREO_*.md
+CORREO_EQUIPO.md
 
 # Logs y archivos temporales
 logs/
