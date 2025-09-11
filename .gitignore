@@ -29,6 +29,30 @@ MANIFEST
 *.manifest
 *.spec
 
+# Scripts de despliegue y configuración
+*.sh
+!start_app.sh
+!deploy.sh
+
+# Archivos de correos y comunicación
+CORREO_*.md
+
+# Logs y archivos temporales
+logs/
+*.log
+
+# Environment files
+.env
+.venv
+dashboard_env/
+
+# VSCode
+.vscode/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
 # Installer logs
 pip-log.txt
 pip-delete-this-directory.txt
