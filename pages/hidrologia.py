@@ -22,6 +22,7 @@ from pydataxm.pydataxm import ReadDB
 # Imports locales para componentes uniformes
 from .components import crear_header, crear_navbar, crear_sidebar_universal
 from .config import COLORS
+from .api_fallback import create_fallback_data, create_api_status_message, save_api_status
 
 warnings.filterwarnings("ignore")
 
@@ -63,15 +64,20 @@ def format_date(date_value):
         return date_value
 
 
-# Inicializar API XM
+# Inicializar API XM con fallback
 import traceback
+API_STATUS = None
 try:
     objetoAPI = ReadDB()
-    print("API XM inicializada correctamente")
+    print("✅ API XM inicializada correctamente")
+    API_STATUS = {'status': 'online', 'message': 'API XM funcionando correctamente'}
 except Exception as e:
-    print(f"Error al inicializar API XM: {e}")
+    print(f"❌ Error al inicializar API XM: {e}")
     traceback.print_exc()
     objetoAPI = None
+    API_STATUS = create_api_status_message()
+    save_api_status(API_STATUS)
+    print("⚠️ Activando modo fallback con datos de ejemplo")
 
 
 # --- VALIDACIÓN DE FECHAS Y MANEJO DE ERRORES ---
@@ -249,6 +255,17 @@ def crear_estilos_condicionales_para_tabla_estatica(start_date=None, end_date=No
 layout = html.Div([
     # Sidebar desplegable
     crear_sidebar_universal(),
+    
+    # Banner de advertencia API (solo visible cuando API está offline)
+    html.Div([
+        dbc.Alert([
+            html.I(className="fas fa-exclamation-triangle me-2"),
+            html.Strong("API XM no disponible - "),
+            "El servidor de datos de XM no está respondiendo. ",
+            "Se están mostrando datos de ejemplo para fines de demostración. ",
+            html.A("Recargar página", href="/hidrologia", className="alert-link")
+        ], color="warning", dismissable=True, is_open=True)
+    ], id="api-warning-banner", style={"display": "block" if API_STATUS and API_STATUS.get('status') == 'offline' else "none"}),
     
     # Header uniforme
     # Header dinámico específico para hidrología
