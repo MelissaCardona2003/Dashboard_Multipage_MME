@@ -30,5 +30,5 @@ app.layout = html.Div([
 
 if __name__ == "__main__":
     print("🚀 Iniciando servidor Dash...")
-    print("📍 La aplicación estará disponible en: http://0.0.0.0:8065/")
-    app.run_server(debug=False, host='0.0.0.0', port=8065)
+    print("📍 La aplicación estará disponible en: http://0.0.0.0:8056/")
+    app.run_server(debug=False, host='0.0.0.0', port=8056)
