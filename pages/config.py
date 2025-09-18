@@ -2,15 +2,6 @@
 Configuración para el dashboard Dash
 """
 
-# Archivos de datos
-DATA_FILES = {
-    "granjas_actualizadas": "pages/Base granjas_actualizada.csv",
-    "granjas_original": "pages/Base granjas.csv",
-    "comunidades": "pages/Base comunidades energéticas.csv",
-    "estadisticas": "pages/estadisticas_distancias.csv",
-    "resumen_detallado": "pages/resumen_detallado_proximidades.csv"
-}
-
 # Configuración de colores y estilos - INSTITUCIONAL MINISTERIO
 COLORS = {
     'primary': '#1E3A8A',        # Azul institucional oscuro
@@ -18,6 +9,7 @@ COLORS = {
     'accent': '#B45309',         # Naranja institucional (energía)
     'success': '#047857',        # Verde éxito
     'warning': '#D97706',        # Naranja advertencia
+    'danger': '#DC2626',         # Rojo peligro
     'info': '#0369A1',           # Azul información
     'bg_main': '#FAFAFA',        # Fondo principal gris muy claro
     'bg_card': '#FFFFFF',        # Cards blancos puros

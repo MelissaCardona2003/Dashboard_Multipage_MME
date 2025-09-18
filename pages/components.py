@@ -68,16 +68,6 @@ def crear_sidebar_universal():
                     "Inicio"
                 ], href="/", active="exact", className="nav-link-sidebar mb-2"),
                 
-                # Análisis de postulaciones (acordeón)
-                dbc.Accordion([
-                    dbc.AccordionItem([
-                        dbc.NavLink([
-                            html.I(className="fas fa-solar-panel me-3", style={"color": COLORS['secondary']}),
-                            "Coordenadas"
-                        ], href="/coordenadas", active="exact", className="nav-link-sidebar ms-3")
-                    ], title="📋 Análisis de postulaciones", item_id="analisis")
-                ], id="accordion-analisis", className="mb-2", flush=True, always_open=False),
-                
                 # Métricas
                 dbc.NavLink([
                     html.I(className="fas fa-chart-line me-3", style={"color": COLORS['info']}),

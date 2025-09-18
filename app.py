@@ -16,7 +16,7 @@ app = Dash(
 
 # Importar las páginas DESPUÉS de crear la aplicación
 try:
-    from pages import index, coordenadas, metricas, hidrologia, demanda
+    from pages import index, metricas, hidrologia, demanda
     from pages import generacion_solar, generacion_eolica, generacion_biomasa, generacion_hidraulica
     print("✅ Todas las páginas importadas correctamente")
 except Exception as e:
@@ -30,5 +30,5 @@ app.layout = html.Div([
 
 if __name__ == "__main__":
     print("🚀 Iniciando servidor Dash...")
-    print("📍 La aplicación estará disponible en: http://0.0.0.0:8056/")
-    app.run(debug=False, host='0.0.0.0', port=8056)
+    print("📍 La aplicación estará disponible en: http://0.0.0.0:8065/")
+    app.run_server(debug=False, host='0.0.0.0', port=8065)

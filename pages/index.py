@@ -91,34 +91,10 @@ layout = html.Div([
                             # Sección 1: Análisis y Métricas
                             html.H5([
                                 html.I(className="fas fa-chart-bar me-2", style={"color": COLORS['primary']}),
-                                "Análisis y Métricas"
+                                "Herramienta para explorar las métricas de XM"
                             ], className="mb-3", style={"color": COLORS['primary']}),
                             
                             dbc.Row([
-                                dbc.Col([
-                                    dbc.Card([
-                                        dbc.CardBody([
-                                            html.H5([
-                                                html.I(className="fas fa-map-marked-alt me-2", style={"color": "#28a745"}),
-                                                "Análisis de Coordenadas"
-                                            ], style={"color": "#28a745"}),
-                                            html.P("Sistema avanzado de análisis geoespacial para granjas solares y comunidades energéticas. Incluye mapas interactivos con más de 1000 ubicaciones, cálculo automático de distancias euclidianas, análisis de proximidad y generación de reportes de viabilidad para postulaciones.", 
-                                                   className="mb-3", style={"color": COLORS['text_secondary']}),
-                                            html.Ul([
-                                                html.Li("�️ Mapas interactivos con 1000+ ubicaciones"),
-                                                html.Li("📏 Cálculo automático de distancias"),
-                                                html.Li("🎯 Análisis de viabilidad de proyectos"),
-                                                html.Li("📊 Estadísticas detalladas de proximidad"),
-                                                html.Li("💾 Exportación de reportes CSV/Excel")
-                                            ], style={"color": COLORS['text_secondary'], "fontSize": "0.9rem"}),
-                                            dbc.Button([
-                                                html.I(className="fas fa-arrow-right me-2"),
-                                                "Acceder al Análisis"
-                                            ], href="/coordenadas", color="success", className="w-100")
-                                        ])
-                                    ], className="h-100", style={'border': '2px solid #28a745'})
-                                ], md=6, className="mb-4"),
-                                
                                 dbc.Col([
                                     dbc.Card([
                                         dbc.CardBody([
@@ -141,7 +117,7 @@ layout = html.Div([
                                             ], href="/metricas", color="info", className="w-100")
                                         ])
                                     ], className="h-100", style={'border': '2px solid #17a2b8'})
-                                ], md=6, className="mb-4")
+                                ], md=12, className="mb-4")
                             ]),
                             
                             html.Hr(className="my-4"),

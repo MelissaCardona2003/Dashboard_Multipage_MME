@@ -29,16 +29,18 @@ show_menu() {
     echo -e "${YELLOW}🔧 GESTIÓN DE LA APLICACIÓN:${NC}"
     echo "   5) Iniciar/Reiniciar aplicación"
     echo "   6) Detener aplicación"
-    echo "   7) Actualizar desde Git"
+    echo "   7) Actualizar desde Git (manual)"
+    echo "   8) Actualizar desde Git (automático)"
+    echo "   9) Configurar actualizaciones automáticas"
     echo ""
     echo -e "${BLUE}⚙️  SISTEMA:${NC}"
-    echo "   8) Ver uso de recursos"
-    echo "   9) Limpiar logs antiguos"
-    echo "   10) Reiniciar nginx"
+    echo "   10) Ver uso de recursos"
+    echo "   11) Limpiar logs antiguos"
+    echo "   12) Reiniciar nginx"
     echo ""
     echo -e "${GREEN}🔐 SSL:${NC}"
-    echo "   11) Ver estado de certificados"
-    echo "   12) Renovar certificados SSL"
+    echo "   13) Ver estado de certificados"
+    echo "   14) Renovar certificados SSL"
     echo ""
     echo "   0) Salir"
     echo ""
@@ -112,11 +114,23 @@ view_logs() {
 }
 
 update_app() {
-    echo -e "${YELLOW}🔄 Actualizando desde Git...${NC}"
+    echo -e "${YELLOW}🔄 Actualizando desde Git (manual)...${NC}"
     cd $APP_DIR
     git pull origin main
     echo "✅ Código actualizado. Reiniciando aplicación..."
     start_app
+}
+
+auto_update_app() {
+    echo -e "${YELLOW}🔄 Actualizando con script automático...${NC}"
+    cd $APP_DIR
+    ./auto-update.sh update
+}
+
+setup_auto_updates() {
+    echo -e "${BLUE}⚙️ Configurando actualizaciones automáticas...${NC}"
+    cd $APP_DIR
+    ./setup-auto-update.sh
 }
 
 show_resources() {
@@ -144,11 +158,13 @@ main() {
             5) clear; start_app; read -p "Enter para continuar..."; ;;
             6) clear; stop_app; read -p "Enter para continuar..."; ;;
             7) clear; update_app; read -p "Enter para continuar..."; ;;
-            8) clear; show_resources; read -p "Enter para continuar..."; ;;
-            9) clear; echo "🧹 Limpiando logs..."; find $APP_DIR/logs -name "*.log" -mtime +7 -delete 2>/dev/null; echo "✅ Logs limpiados"; read -p "Enter para continuar..."; ;;
-            10) clear; echo "🔄 Reiniciando nginx..."; sudo systemctl restart nginx; echo "✅ Nginx reiniciado"; read -p "Enter para continuar..."; ;;
-            11) clear; echo "🔐 Certificados SSL:"; sudo certbot certificates; read -p "Enter para continuar..."; ;;
-            12) clear; echo "🔄 Renovando SSL..."; sudo certbot renew; sudo systemctl reload nginx; echo "✅ SSL renovado"; read -p "Enter para continuar..."; ;;
+            8) clear; auto_update_app; read -p "Enter para continuar..."; ;;
+            9) clear; setup_auto_updates; read -p "Enter para continuar..."; ;;
+            10) clear; show_resources; read -p "Enter para continuar..."; ;;
+            11) clear; echo "🧹 Limpiando logs..."; find $APP_DIR/logs -name "*.log" -mtime +7 -delete 2>/dev/null; echo "✅ Logs limpiados"; read -p "Enter para continuar..."; ;;
+            12) clear; echo "🔄 Reiniciando nginx..."; sudo systemctl restart nginx; echo "✅ Nginx reiniciado"; read -p "Enter para continuar..."; ;;
+            13) clear; echo "🔐 Certificados SSL:"; sudo certbot certificates; read -p "Enter para continuar..."; ;;
+            14) clear; echo "🔄 Renovando SSL..."; sudo certbot renew; sudo systemctl reload nginx; echo "✅ SSL renovado"; read -p "Enter para continuar..."; ;;
             0) echo -e "${GREEN}👋 ¡Hasta luego!${NC}"; exit 0; ;;
             *) echo -e "${RED}❌ Opción inválida${NC}"; sleep 1; ;;
         esac
