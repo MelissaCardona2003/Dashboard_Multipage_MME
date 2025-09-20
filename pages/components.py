@@ -77,13 +77,7 @@ def crear_sidebar_universal():
                 # Tableros (acordeón)
                 dbc.Accordion([
                     dbc.AccordionItem([
-                        # Hidrología
-                        dbc.NavLink([
-                            html.I(className="fas fa-tint me-3", style={"color": COLORS['accent']}),
-                            "Hidrología"
-                        ], href="/hidrologia", active="exact", className="nav-link-sidebar ms-3 mb-2"),
-                        
-                        # Generación (sub-acordeón)
+                       # Generación (sub-acordeón)
                         dbc.Accordion([
                             dbc.AccordionItem([
                                 dbc.NavLink([

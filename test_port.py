@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from dash import Dash, html, dcc, page_container
 import dash_bootstrap_components as dbc
 
@@ -13,21 +15,13 @@ app = Dash(
     suppress_callback_exceptions=True
 )
 
-# Importar las páginas DESPUÉS de crear la aplicación
-try:
-    from pages import index, metricas, demanda
-    from pages import generacion_solar, generacion_eolica, generacion_biomasa, generacion_hidraulica
-    print("✅ Todas las páginas importadas correctamente")
-except Exception as e:
-    print(f"❌ Error importando páginas: {e}")
-
-# Layout principal de la aplicación usando page_container
+# Layout simple para prueba
 app.layout = html.Div([
-    dcc.Location(id="url", refresh=False),
-    page_container
+    html.H1("Test Server"),
+    html.P("Puerto correcto: 9000")
 ])
 
 if __name__ == "__main__":
-    print("🚀 Iniciando servidor Dash...")
+    print("🚀 Iniciando servidor de prueba Dash...")
     print("📍 La aplicación estará disponible en: http://0.0.0.0:9000/")
     app.run_server(debug=False, host='0.0.0.0', port=9000)
