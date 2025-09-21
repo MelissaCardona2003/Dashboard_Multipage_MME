@@ -12,10 +12,15 @@ import traceback
 from flask import Flask, jsonify
 import dash
 # Use the installed pydataxm package instead of local module
-from pydataxm.pydataxm import ReadDB
+try:
+    from pydataxm.pydataxm import ReadDB
+    PYDATAXM_AVAILABLE = True
+except ImportError:
+    PYDATAXM_AVAILABLE = False
+    print("⚠️ pydataxm no está disponible. Algunos datos pueden no cargarse correctamente.")
 
 # Imports locales para componentes uniformes
-from .components import crear_header, crear_navbar, crear_sidebar_universal
+from .components import crear_header, crear_navbar, crear_sidebar_universal, crear_boton_regresar
 from .config import COLORS
 
 warnings.filterwarnings("ignore")
@@ -138,15 +143,17 @@ def layout():
                         # Header
                         # Header dinámico específico para generación eólica
                         crear_header(
-                            titulo_pagina="Dashboard de Generación Eólica",
-                            descripcion_pagina="Análisis integral de energía eólica y potencial del viento",
+                            titulo_pagina="Generación Eólica",
+                            descripcion_pagina="Análisis de energía eólica y potencial del viento por regiones",
                             icono_pagina="fas fa-wind",
-                            informacion_adicional="Monitoreo de velocidades de viento, rendimiento de aerogeneradores, patrones estacionales y mapas de potencial eólico nacional",
-                            color_tema="#20B2AA"
+                            color_tema=COLORS['energia_eolica']
                         ),
                         
                         # Container principal
                         dbc.Container([
+                            # Botón de regreso
+                            crear_boton_regresar(),
+                            
                             # Título específico de la página
                             html.Div([
                                 html.H2([

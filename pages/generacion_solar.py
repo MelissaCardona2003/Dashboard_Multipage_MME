@@ -12,10 +12,15 @@ import traceback
 from flask import Flask, jsonify
 import dash
 # Use the installed pydataxm package instead of local module
-from pydataxm.pydataxm import ReadDB
+try:
+    from pydataxm.pydataxm import ReadDB
+    PYDATAXM_AVAILABLE = True
+except ImportError:
+    PYDATAXM_AVAILABLE = False
+    print("⚠️ pydataxm no está disponible. Algunos datos pueden no cargarse correctamente.")
 
 # Imports locales para componentes uniformes
-from .components import crear_header, crear_navbar, crear_sidebar_universal
+from .components import crear_header, crear_navbar, crear_sidebar_universal, crear_boton_regresar
 from .config import COLORS
 
 warnings.filterwarnings("ignore")
@@ -138,15 +143,17 @@ def layout():
                         # Header
                         # Header dinámico específico para generación solar
                         crear_header(
-                            titulo_pagina="Dashboard de Generación Solar",
-                            descripcion_pagina="Análisis integral de energía solar fotovoltaica en Colombia",
+                            titulo_pagina="Generación Solar",
+                            descripcion_pagina="Análisis de energía solar fotovoltaica y producción por regiones",
                             icono_pagina="fas fa-sun",
-                            informacion_adicional="Monitoreo de radiación solar, eficiencia de plantas fotovoltaicas, producción por regiones y evaluación del potencial solar nacional",
-                            color_tema="#FF8C00"
+                            color_tema=COLORS['energia_solar']
                         ),
                         
                         # Container principal
                         dbc.Container([
+                            # Botón de regreso
+                            crear_boton_regresar(),
+                            
                             # Título específico de la página
                             html.Div([
                                 html.H2([

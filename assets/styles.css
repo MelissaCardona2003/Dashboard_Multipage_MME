@@ -1,6 +1,6 @@
 /* ===================================================================
    DASHBOARD INSTITUCIONAL - MINISTERIO DE MINAS Y ENERGÍA COLOMBIA
-   Estilos CSS para aplicación Dash - Actualizado para panel de consulta
+   Estilos CSS para aplicación Dash - Diseño Moderno y Atractivo
    =================================================================== */
 
 /* IMPORTAR FUENTES */
@@ -13,39 +13,156 @@
     box-sizing: border-box;
 }
 
+html {
+    scroll-behavior: smooth;
+}
+
 body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
-    background: #FFFFFF !important;
+    background: linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%) !important;
     min-height: 100vh;
     color: #1F2937 !important;
+    line-height: 1.6;
+}
+
+/* CONTENEDOR PRINCIPAL */
+._dash-core-components {
+    background: transparent !important;
+}
+
+/* ANIMACIONES */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translate3d(0, 30px, 0);
+    }
+    to {
+        opacity: 1;
+        transform: translate3d(0, 0, 0);
+    }
+}
+
+@keyframes slideInRight {
+    from {
+        opacity: 0;
+        transform: translate3d(30px, 0, 0);
+    }
+    to {
+        opacity: 1;
+        transform: translate3d(0, 0, 0);
+    }
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+    100% {
+        transform: scale(1);
+    }
 }
 
 /* ESTILOS PARA SIDEBAR UNIVERSAL Y NAVEGACIÓN */
 .nav-link-custom {
     color: #6B7280 !important;
-    padding: 12px 16px !important;
-    border-radius: 10px !important;
-    transition: all 0.3s ease !important;
+    padding: 14px 18px !important;
+    border-radius: 16px !important;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
     margin-bottom: 8px !important;
     text-decoration: none !important;
-    border: 1px solid transparent !important;
+    border: 2px solid transparent !important;
     display: flex !important;
     align-items: center !important;
+    font-weight: 500 !important;
+    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.7) !important;
 }
 
 .nav-link-custom:hover {
-    background: linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%) !important;
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(37, 99, 235, 0.1) 100%) !important;
     color: #1E3A8A !important;
-    transform: translateX(5px) !important;
-    border-color: #E5E7EB !important;
+    transform: translateX(8px) scale(1.02) !important;
+    border-color: #3B82F6 !important;
+    box-shadow: 0 8px 25px rgba(59, 130, 246, 0.15) !important;
 }
 
 .nav-link-custom.active {
-    background: linear-gradient(135deg, #1E3A8A 0%, #0369A1 100%) !important;
+    background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%) !important;
     color: #FFFFFF !important;
     font-weight: 600 !important;
-    transform: translateX(5px) !important;
-    box-shadow: 0 4px 12px rgba(30, 58, 138, 0.3) !important;
+    transform: translateX(8px) scale(1.02) !important;
+    box-shadow: 0 12px 32px rgba(59, 130, 246, 0.4) !important;
+    border-color: #1D4ED8 !important;
+}
+
+/* HEADER MEJORADO */
+.header-container {
+    background: linear-gradient(135deg, #1E3A8A 0%, #1E40AF 50%, #2563EB 100%) !important;
+    box-shadow: 0 8px 32px rgba(30, 58, 138, 0.3) !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+    backdrop-filter: blur(20px);
+    position: relative;
+    overflow: hidden;
+}
+
+.header-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 20"><defs><radialGradient id="g" cx="20" cy="20" r="20"><stop offset="0" stop-color="rgba(255,255,255,0.1)"/><stop offset="1" stop-color="rgba(255,255,255,0)"/></radialGradient></defs><rect width="100" height="20" fill="url(%23g)"/></svg>') repeat;
+    opacity: 0.3;
+    animation: slidePattern 20s linear infinite;
+}
+
+@keyframes slidePattern {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(100px); }
+}
+
+/* TARJETAS DE SECTOR MEJORADAS */
+.sector-card {
+    background: rgba(255, 255, 255, 0.9) !important;
+    backdrop-filter: blur(20px) !important;
+    border: 2px solid rgba(255, 255, 255, 0.2) !important;
+    border-radius: 24px !important;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    position: relative;
+    overflow: hidden;
+    animation: fadeInUp 0.6s ease-out;
+}
+
+.sector-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, transparent 0%, rgba(255, 255, 255, 0.1) 100%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.sector-card:hover::before {
+    opacity: 1;
+}
+
+.sector-card:hover {
+    transform: translateY(-12px) scale(1.02) !important;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15) !important;
+    border-color: rgba(59, 130, 246, 0.3) !important;
+    background: rgba(255, 255, 255, 0.95) !important;
+}
+
+.sector-card:active {
+    transform: translateY(-8px) scale(0.98) !important;
+    transition: transform 0.1s ease !important;
 }
 
 /* SIDEBAR DESPLEGABLE */
@@ -829,4 +946,270 @@ body {
 .accordion .accordion .accordion-button:not(.collapsed) {
     background: linear-gradient(135deg, #F0F9FF 0%, #E0F2FE 100%) !important;
     color: #0369A1 !important;
+}
+
+/* ===================================================================
+   ESTILOS MODERNOS PARA KPIs Y COMPONENTES MEJORADOS
+   =================================================================== */
+
+/* KPI CARDS MODERNAS */
+.kpi-card {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%) !important;
+    border: 2px solid rgba(59, 130, 246, 0.1) !important;
+    border-radius: 20px !important;
+    backdrop-filter: blur(20px) !important;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    position: relative !important;
+    overflow: hidden !important;
+    animation: fadeInUp 0.6s ease-out !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08) !important;
+}
+
+.kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 4px;
+    background: linear-gradient(90deg, #3B82F6, #2563EB, #1D4ED8);
+    border-radius: 20px 20px 0 0;
+}
+
+.kpi-card:hover {
+    transform: translateY(-8px) scale(1.02) !important;
+    box-shadow: 0 20px 40px rgba(59, 130, 246, 0.15) !important;
+    border-color: rgba(59, 130, 246, 0.3) !important;
+}
+
+/* NÚMEROS KPI */
+.kpi-number {
+    font-family: 'Poppins', sans-serif !important;
+    font-weight: 700 !important;
+    background: linear-gradient(135deg, #1E3A8A 0%, #2563EB 100%) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+    background-clip: text !important;
+    font-size: 2.5rem !important;
+    line-height: 1.2 !important;
+}
+
+.kpi-label {
+    color: #6B7280 !important;
+    font-weight: 600 !important;
+    font-size: 0.95rem !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.5px !important;
+    margin-top: 8px !important;
+}
+
+/* BOTONES MODERNOS */
+.btn-modern {
+    border-radius: 16px !important;
+    padding: 12px 24px !important;
+    font-weight: 600 !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    border: 2px solid transparent !important;
+    position: relative !important;
+    overflow: hidden !important;
+}
+
+.btn-modern::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    transition: left 0.6s ease;
+}
+
+.btn-modern:hover::before {
+    left: 100%;
+}
+
+.btn-primary.btn-modern {
+    background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%) !important;
+    border-color: #2563EB !important;
+    color: white !important;
+}
+
+.btn-primary.btn-modern:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 12px 25px rgba(37, 99, 235, 0.4) !important;
+    background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%) !important;
+}
+
+/* GRÁFICOS MEJORADOS */
+.plotly-graph-div {
+    border-radius: 16px !important;
+    overflow: hidden !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08) !important;
+    transition: all 0.3s ease !important;
+}
+
+.plotly-graph-div:hover {
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12) !important;
+}
+
+/* TABLAS MODERNAS */
+.dash-table-container {
+    border-radius: 16px !important;
+    overflow: hidden !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08) !important;
+    background: white !important;
+}
+
+.dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner table {
+    border-collapse: separate !important;
+    border-spacing: 0 !important;
+}
+
+.dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner th {
+    background: linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%) !important;
+    color: #374151 !important;
+    font-weight: 600 !important;
+    padding: 16px !important;
+    border-bottom: 2px solid #E5E7EB !important;
+}
+
+.dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner td {
+    padding: 14px 16px !important;
+    border-bottom: 1px solid #F3F4F6 !important;
+    transition: background-color 0.2s ease !important;
+}
+
+.dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner tr:hover td {
+    background-color: #F8FAFC !important;
+}
+
+/* ALERTAS MEJORADAS */
+.alert {
+    border-radius: 16px !important;
+    border: none !important;
+    padding: 20px !important;
+    backdrop-filter: blur(10px) !important;
+    position: relative !important;
+    overflow: hidden !important;
+}
+
+.alert::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background: currentColor;
+}
+
+.alert-primary {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(37, 99, 235, 0.05) 100%) !important;
+    color: #1E3A8A !important;
+}
+
+.alert-success {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(22, 163, 74, 0.05) 100%) !important;
+    color: #14532D !important;
+}
+
+.alert-warning {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(217, 119, 6, 0.05) 100%) !important;
+    color: #92400E !important;
+}
+
+.alert-info {
+    background: linear-gradient(135deg, rgba(6, 182, 212, 0.1) 0%, rgba(8, 145, 178, 0.05) 100%) !important;
+    color: #0F4C5C !important;
+}
+
+/* LOADING SPINNER MODERNO */
+.loading-spinner {
+    border: 4px solid rgba(59, 130, 246, 0.1);
+    border-left: 4px solid #3B82F6;
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    animation: spin 1s linear infinite;
+    margin: 20px auto;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* RESPONSIVE DESIGN MEJORADO */
+@media (max-width: 768px) {
+    .kpi-number {
+        font-size: 2rem !important;
+    }
+    
+    .sector-card {
+        border-radius: 16px !important;
+    }
+    
+    .btn-modern {
+        padding: 10px 20px !important;
+        font-size: 0.9rem !important;
+    }
+}
+
+/* SCROLLBAR PERSONALIZADA */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #F3F4F6;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, #CBD5E1, #94A3B8);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, #94A3B8, #64748B);
+}
+
+/* MEJORAS GENERALES DE UX */
+.fade-in {
+    animation: fadeInUp 0.6s ease-out;
+}
+
+.slide-in-right {
+    animation: slideInRight 0.6s ease-out;
+}
+
+.pulse-hover:hover {
+    animation: pulse 1s infinite;
+}
+
+/* EFECTOS DE CRISTAL */
+.glass-effect {
+    background: rgba(255, 255, 255, 0.25) !important;
+    backdrop-filter: blur(20px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37) !important;
+}
+
+/* GRADIENTES PERSONALIZADOS */
+.gradient-blue {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+}
+
+.gradient-purple {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%) !important;
+}
+
+.gradient-green {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%) !important;
+}
+
+.gradient-orange {
+    background: linear-gradient(135deg, #fa709a 0%, #fee140 100%) !important;
 }

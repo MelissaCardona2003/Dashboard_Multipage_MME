@@ -13,10 +13,15 @@ import base64
 import warnings
 import zipfile
 
-from pydataxm.pydataxm import ReadDB
+try:
+    from pydataxm.pydataxm import ReadDB
+    PYDATAXM_AVAILABLE = True
+except ImportError:
+    PYDATAXM_AVAILABLE = False
+    print("⚠️ pydataxm no está disponible. Algunos datos pueden no cargarse correctamente.")
 
 # Imports locales para componentes uniformes
-from .components import crear_header, crear_navbar, crear_sidebar_universal
+from .components import crear_header, crear_navbar, crear_sidebar_universal, crear_boton_regresar
 from .config import COLORS
 
 warnings.filterwarnings("ignore")
@@ -242,16 +247,18 @@ layout = html.Div([
     # Header uniforme
     # Header dinámico específico para métricas
     crear_header(
-        titulo_pagina="Sistema de Métricas Energéticas (XM)",
-        descripcion_pagina="Consulta y análisis integral de variables del mercado eléctrico colombiano",
+        titulo_pagina="Métricas Energéticas",
+        descripcion_pagina="Consulta y análisis de variables del mercado eléctrico colombiano",
         icono_pagina="fas fa-chart-line",
-        informacion_adicional="Acceso a más de 190 métricas oficiales del operador XM - Datos en tiempo real de generación, demanda, transacciones y operación del SIN",
-        color_tema="#17a2b8"
+        color_tema=COLORS['primary']
     ),
     # Barra de navegación eliminada
     
     # Container principal
     dbc.Container([
+        # Botón de regreso
+        crear_boton_regresar(),
+        
         dbc.Row([
             # Contenido principal (ahora ocupa todo el ancho)
             dbc.Col([

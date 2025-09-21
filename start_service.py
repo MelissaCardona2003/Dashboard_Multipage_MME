@@ -16,7 +16,7 @@ if __name__ == '__main__':
     print("🚀 Iniciando Dashboard MME como servicio...")
     app.app.run_server(
         host='0.0.0.0',
-        port=8056,
+        port=8000,
         debug=False,
         dev_tools_hot_reload=False,
         dev_tools_ui=False,

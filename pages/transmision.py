@@ -7,21 +7,21 @@ from .config import COLORS
 
 register_page(
     __name__,
-    path="/demanda",
-    name="Demanda",
-    title="Demanda Energética - Ministerio de Minas y Energía",
-    order=8
+    path="/transmision",
+    name="Transmisión",
+    title="Transmisión Eléctrica - Ministerio de Minas y Energía",
+    order=9
 )
 
-# Definir las subsecciones de demanda
-DEMANDA_SUBSECTIONS = [
-    {"name": "Demanda Histórica", "path": "/demanda-historica", "icon": "fas fa-chart-line", "color": "#FF9800", "description": "Análisis de patrones históricos de demanda"},
-    {"name": "Pronósticos", "path": "/demanda-pronosticos", "icon": "fas fa-crystal-ball", "color": "#FF8A65", "description": "Modelos predictivos de demanda futura"},
-    {"name": "Patrones de Demanda", "path": "/demanda-patrones", "icon": "fas fa-wave-square", "color": "#FFAB40", "description": "Análisis de comportamientos y patrones"}
+# Definir las subsecciones de transmisión
+TRANSMISION_SUBSECTIONS = [
+    {"name": "Líneas de Transmisión", "path": "/transmision-lineas", "icon": "fas fa-plug", "color": "#00BCD4", "description": "Red de líneas de alta tensión"},
+    {"name": "Subestaciones", "path": "/transmision-subestaciones", "icon": "fas fa-building", "color": "#0097A7", "description": "Infraestructura de subestaciones"},
+    {"name": "Congestión", "path": "/transmision-congestion", "icon": "fas fa-traffic-light", "color": "#00ACC1", "description": "Análisis de congestión del sistema"}
 ]
 
 def create_subsection_card(subsection):
-    """Crear tarjeta para cada subsección de demanda"""
+    """Crear tarjeta para cada subsección de transmisión"""
     return dbc.Col([
         html.A([
             dbc.Card([
@@ -58,24 +58,26 @@ layout = html.Div([
     # Sidebar desplegable
     crear_sidebar_universal(),
     
-    # Header específico para demanda
+    # Header específico para transmisión
     crear_header(
-        titulo_pagina="Demanda Energética",
-        descripcion_pagina="Análisis de consumo energético nacional y proyecciones",
-        icono_pagina="fas fa-chart-bar",
-        color_tema=COLORS['demanda']
+        titulo_pagina="Transmisión Eléctrica",
+        descripcion_pagina="Infraestructura de transmisión y subestaciones del sistema eléctrico",
+        icono_pagina="fas fa-broadcast-tower",
+        color_tema=COLORS['transmision']
     ),
     
     # Container principal
     dbc.Container([
         # Botón de regreso
-        crear_boton_regresar(),        # Título de la sección
+        crear_boton_regresar(),
+        
+        # Título de la sección
         dbc.Row([
             dbc.Col([
                 html.Div([
-                    html.I(className="fas fa-chart-bar", 
-                          style={"fontSize": "4rem", "color": "#FF9800", "marginRight": "1rem"}),
-                    html.H1("DEMANDA ENERGÉTICA", 
+                    html.I(className="fas fa-broadcast-tower", 
+                          style={"fontSize": "4rem", "color": "#00BCD4", "marginRight": "1rem"}),
+                    html.H1("TRANSMISIÓN ELÉCTRICA", 
                            style={"color": COLORS['text_primary'], "fontWeight": "700", "display": "inline-block"})
                 ], className="text-center mb-2")
             ])
@@ -83,7 +85,7 @@ layout = html.Div([
         
         dbc.Row([
             dbc.Col([
-                html.P("Análisis integral de la demanda energética nacional en Colombia",
+                html.P("Infraestructura de transmisión y transporte de energía eléctrica",
                       className="text-center text-muted mb-5", 
                       style={"fontSize": "1.2rem"})
             ])
@@ -91,7 +93,7 @@ layout = html.Div([
         
         # Tarjetas de subsecciones
         dbc.Row([
-            create_subsection_card(subsection) for subsection in DEMANDA_SUBSECTIONS
+            create_subsection_card(subsection) for subsection in TRANSMISION_SUBSECTIONS
         ]),
         
     ], fluid=True, className="py-4")

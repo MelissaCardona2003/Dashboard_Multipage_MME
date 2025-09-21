@@ -60,7 +60,7 @@ def crear_sidebar_universal():
             # Contenido del sidebar
             html.Div([
                 # Enlaces de navegación principales
-                html.H6("📊 Dashboards", className="mb-3", style={'color': COLORS['primary'], 'fontWeight': '600'}),
+                html.H6("🏠 Navegación Principal", className="mb-3", style={'color': COLORS['primary'], 'fontWeight': '600'}),
                 
                 # Inicio
                 dbc.NavLink([
@@ -72,45 +72,129 @@ def crear_sidebar_universal():
                 dbc.NavLink([
                     html.I(className="fas fa-chart-line me-3", style={"color": COLORS['info']}),
                     "Métricas"
-                ], href="/metricas", active="exact", className="nav-link-sidebar mb-2"),
+                ], href="/metricas", active="exact", className="nav-link-sidebar mb-3"),
                 
-                # Tableros (acordeón)
+                html.Hr(),
+                
+                # Sectores del Sistema Energético
+                html.H6("⚡ Sectores Energéticos", className="mb-3", style={'color': COLORS['primary'], 'fontWeight': '600'}),
+                
+                # Acordeón de sectores
                 dbc.Accordion([
+                    # GENERACIÓN
                     dbc.AccordionItem([
-                       # Generación (sub-acordeón)
-                        dbc.Accordion([
-                            dbc.AccordionItem([
-                                dbc.NavLink([
-                                    html.I(className="fas fa-sun me-3", style={"color": "#FFA500"}),
-                                    "Solar"
-                                ], href="/generacion/solar", active="exact", className="nav-link-sidebar ms-4"),
-                                dbc.NavLink([
-                                    html.I(className="fas fa-wind me-3", style={"color": "#00CED1"}),
-                                    "Eólica"
-                                ], href="/generacion/eolica", active="exact", className="nav-link-sidebar ms-4"),
-                                dbc.NavLink([
-                                    html.I(className="fas fa-leaf me-3", style={"color": "#228B22"}),
-                                    "Biomasa"
-                                ], href="/generacion/biomasa", active="exact", className="nav-link-sidebar ms-4"),
-                                dbc.NavLink([
-                                    html.I(className="fas fa-water me-3", style={"color": "#4682B4"}),
-                                    "Hidráulica"
-                                ], href="/generacion/hidraulica", active="exact", className="nav-link-sidebar ms-4")
-                            ], title="⚡ Generación", item_id="generacion")
-                        ], id="accordion-generacion", className="ms-3 mb-2", flush=True, always_open=False),
-                        
-                        # Demanda
                         dbc.NavLink([
-                            html.I(className="fas fa-chart-area me-3", style={"color": "#9932CC"}),
-                            "Demanda"
-                        ], href="/demanda", active="exact", className="nav-link-sidebar ms-3")
-                    ], title="📊 Tableros", item_id="tableros")
-                ], id="accordion-tableros", className="mb-4", flush=True, always_open=False),
+                            html.I(className="fas fa-water me-3", style={"color": "#2196F3"}),
+                            "Hidráulica"
+                        ], href="/generacion/hidraulica", active="exact", className="nav-link-sidebar ms-2 mb-1"),
+                        dbc.NavLink([
+                            html.I(className="fas fa-tint me-3", style={"color": "#03A9F4"}),
+                            "Hidrología"
+                        ], href="/generacion/hidraulica", active="exact", className="nav-link-sidebar ms-2 mb-1"),
+                        dbc.NavLink([
+                            html.I(className="fas fa-fire me-3", style={"color": "#E91E63"}),
+                            "Combustible fósil"
+                        ], href="/generacion/termica", active="exact", className="nav-link-sidebar ms-2 mb-1"),
+                        dbc.NavLink([
+                            html.I(className="fas fa-wind me-3", style={"color": "#4CAF50"}),
+                            "Eólica"
+                        ], href="/generacion/eolica", active="exact", className="nav-link-sidebar ms-2 mb-1"),
+                        dbc.NavLink([
+                            html.I(className="fas fa-leaf me-3", style={"color": "#8BC34A"}),
+                            "Biomasa"
+                        ], href="/generacion/biomasa", active="exact", className="nav-link-sidebar ms-2 mb-1"),
+                        dbc.NavLink([
+                            html.I(className="fas fa-sun me-3", style={"color": "#FFC107"}),
+                            "Solar"
+                        ], href="/generacion/solar", active="exact", className="nav-link-sidebar ms-2")
+                    ], title="⚡ Generación", item_id="generacion"),
+                    
+                    # TRANSMISIÓN
+                    dbc.AccordionItem([
+                        dbc.NavLink([
+                            html.I(className="fas fa-plug me-3", style={"color": "#4CAF50"}),
+                            "Líneas de Transmisión"
+                        ], href="/transmision/lineas", active="exact", className="nav-link-sidebar ms-2 mb-1"),
+                        dbc.NavLink([
+                            html.I(className="fas fa-building me-3", style={"color": "#8BC34A"}),
+                            "Subestaciones"
+                        ], href="/transmision/subestaciones", active="exact", className="nav-link-sidebar ms-2 mb-1"),
+                        dbc.NavLink([
+                            html.I(className="fas fa-tools me-3", style={"color": "#CDDC39"}),
+                            "Mantenimientos"
+                        ], href="/transmision/mantenimientos", active="exact", className="nav-link-sidebar ms-2")
+                    ], title="🏗️ Transmisión", item_id="transmision"),
+                    
+                    # DISTRIBUCIÓN
+                    dbc.AccordionItem([
+                        dbc.NavLink([
+                            html.I(className="fas fa-project-diagram me-3", style={"color": "#FF9800"}),
+                            "Redes Eléctricas"
+                        ], href="/distribucion/redes", active="exact", className="nav-link-sidebar ms-2 mb-1"),
+                        dbc.NavLink([
+                            html.I(className="fas fa-chart-line me-3", style={"color": "#FFC107"}),
+                            "Calidad del Servicio"
+                        ], href="/distribucion/calidad", active="exact", className="nav-link-sidebar ms-2 mb-1"),
+                        dbc.NavLink([
+                            html.I(className="fas fa-users me-3", style={"color": "#FFEB3B"}),
+                            "Usuarios"
+                        ], href="/distribucion/usuarios", active="exact", className="nav-link-sidebar ms-2")
+                    ], title="🔌 Distribución", item_id="distribucion"),
+                    
+                    # DEMANDA
+                    dbc.AccordionItem([
+                        dbc.NavLink([
+                            html.I(className="fas fa-chart-area me-3", style={"color": "#FF5722"}),
+                            "Demanda Nacional"
+                        ], href="/demanda", active="exact", className="nav-link-sidebar ms-2 mb-1"),
+                        dbc.NavLink([
+                            html.I(className="fas fa-chart-line me-3", style={"color": "#FF6F00"}),
+                            "Proyecciones"
+                        ], href="/demanda/proyecciones", active="exact", className="nav-link-sidebar ms-2 mb-1"),
+                        dbc.NavLink([
+                            html.I(className="fas fa-industry me-3", style={"color": "#E65100"}),
+                            "Sectores"
+                        ], href="/demanda/sectores", active="exact", className="nav-link-sidebar ms-2")
+                    ], title="📊 Demanda", item_id="demanda"),
+                    
+                    # PÉRDIDAS
+                    dbc.AccordionItem([
+                        dbc.NavLink([
+                            html.I(className="fas fa-cog me-3", style={"color": "#9C27B0"}),
+                            "Pérdidas Técnicas"
+                        ], href="/perdidas/tecnicas", active="exact", className="nav-link-sidebar ms-2 mb-1"),
+                        dbc.NavLink([
+                            html.I(className="fas fa-exclamation me-3", style={"color": "#E91E63"}),
+                            "Pérdidas Comerciales"
+                        ], href="/perdidas/comerciales", active="exact", className="nav-link-sidebar ms-2 mb-1"),
+                        dbc.NavLink([
+                            html.I(className="fas fa-percentage me-3", style={"color": "#673AB7"}),
+                            "Indicadores"
+                        ], href="/perdidas/indicadores", active="exact", className="nav-link-sidebar ms-2")
+                    ], title="⚠️ Pérdidas", item_id="perdidas"),
+                    
+                    # RESTRICCIONES
+                    dbc.AccordionItem([
+                        dbc.NavLink([
+                            html.I(className="fas fa-stop-circle me-3", style={"color": "#F44336"}),
+                            "Restricciones Activas"
+                        ], href="/restricciones/activas", active="exact", className="nav-link-sidebar ms-2 mb-1"),
+                        dbc.NavLink([
+                            html.I(className="fas fa-wrench me-3", style={"color": "#E53935"}),
+                            "Mantenimientos"
+                        ], href="/restricciones/mantenimientos", active="exact", className="nav-link-sidebar ms-2 mb-1"),
+                        dbc.NavLink([
+                            html.I(className="fas fa-exclamation-circle me-3", style={"color": "#D32F2F"}),
+                            "Emergencias"
+                        ], href="/restricciones/emergencias", active="exact", className="nav-link-sidebar ms-2")
+                    ], title="� Restricciones", item_id="restricciones")
+                    
+                ], id="accordion-sectores", className="mb-4", flush=True, always_open=False),
                 
                 html.Hr(),
                 
                 # Información del sistema
-                html.H6("ℹ️ Sistema", className="mb-3", style={'color': COLORS['primary'], 'fontWeight': '600'}),
+                html.H6("ℹ️ Estado del Sistema", className="mb-3", style={'color': COLORS['primary'], 'fontWeight': '600'}),
                 
                 html.Div([
                     html.I(className="fas fa-circle me-2", style={"color": COLORS['success']}),
@@ -119,17 +203,22 @@ def crear_sidebar_universal():
                 
                 html.Div([
                     html.I(className="fas fa-database me-2", style={"color": COLORS['info']}),
-                    html.Span("API Conectada", style={"color": COLORS['info'], "fontSize": "0.9rem"})
+                    html.Span("API XM Conectada", style={"color": COLORS['info'], "fontSize": "0.9rem"})
                 ], className="mb-2"),
+                
+                html.Div([
+                    html.I(className="fas fa-clock me-2", style={"color": COLORS['warning']}),
+                    html.Span("Datos en Tiempo Real", style={"color": COLORS['warning'], "fontSize": "0.9rem"})
+                ], className="mb-3"),
                 
                 html.Hr(),
                 
-                # Enlaces adicionales
-                html.H6("🔗 Enlaces", className="mb-3", style={'color': COLORS['primary'], 'fontWeight': '600'}),
+                # Enlaces externos
+                html.H6("🔗 Enlaces Institucionales", className="mb-3", style={'color': COLORS['primary'], 'fontWeight': '600'}),
                 
                 html.A([
                     html.I(className="fas fa-external-link-alt me-2"),
-                    "Ministerio de Minas"
+                    "Ministerio de Minas y Energía"
                 ], href="https://www.minenergia.gov.co/", target="_blank", 
                   className="text-decoration-none d-block mb-2", style={"color": COLORS['secondary'], "fontSize": "0.9rem"}),
                 
@@ -137,6 +226,12 @@ def crear_sidebar_universal():
                     html.I(className="fas fa-external-link-alt me-2"),
                     "XM S.A. E.S.P."
                 ], href="https://www.xm.com.co/", target="_blank", 
+                  className="text-decoration-none d-block mb-2", style={"color": COLORS['secondary'], "fontSize": "0.9rem"}),
+                
+                html.A([
+                    html.I(className="fas fa-external-link-alt me-2"),
+                    "CREG"
+                ], href="https://www.creg.gov.co/", target="_blank", 
                   className="text-decoration-none d-block", style={"color": COLORS['secondary'], "fontSize": "0.9rem"}),
             ], style={
                 'padding': '20px',
@@ -157,16 +252,7 @@ def crear_sidebar_universal():
         })
     ])
 
-def crear_header(titulo_pagina=None, descripcion_pagina=None, icono_pagina=None, informacion_adicional=None, color_tema=None):
-    """Crear el header institucional del dashboard con contenido dinámico por página"""
-    
-    # Configuración por defecto si no se especifica página
-    if not titulo_pagina:
-        titulo_pagina = "Agente de IA para el Sector Energético"
-        descripcion_pagina = "Asistente Conversacional Inteligente para el Análisis de Métricas Energéticas (XM)"
-        icono_pagina = "fas fa-robot"
-        informacion_adicional = "Sistema integral de análisis energético del Ministerio de Minas y Energía"
-        color_tema = COLORS['primary']
+
     
     return html.Div([
         html.Div([
@@ -219,7 +305,7 @@ def crear_header(titulo_pagina=None, descripcion_pagina=None, icono_pagina=None,
         ], className="hero-header animate-fade-in", style={
             "background": COLORS['bg_header'], 
             "borderRadius": "0", 
-            "boxShadow": f"0 2px 8px {COLORS['shadow']}", 
+            "boxShadow": f"0 2px 8px {COLORS['shadow_sm']}", 
             "padding": "2rem 2rem 1rem 2rem",
             "border": f"1px solid {COLORS['border']}",
             "borderBottom": f"3px solid {color_tema}"
@@ -695,3 +781,96 @@ def toggle_sidebar(toggle_clicks, close_clicks, overlay_clicks, sidebar_style, o
         return sidebar_hidden, overlay_hidden
     
     return sidebar_style, overlay_style
+
+def crear_header(titulo_pagina=None, descripcion_pagina=None, icono_pagina=None, informacion_adicional=None, color_tema=None):
+    """Crear un header minimalista y elegante específico para cada página"""
+    
+    # Si no se proporcionan datos, crear un header muy sutil o ninguno
+    if not titulo_pagina:
+        return html.Div()  # Header vacío para páginas que no lo necesiten
+    
+    # Asegurar que color_tema tenga un valor por defecto
+    if not color_tema:
+        color_tema = COLORS['primary']
+    
+    return html.Div([
+        # Header compacto y elegante
+        html.Div([
+            # Breadcrumb sutil con logo institucional
+            html.Div([
+                html.Span([
+                    html.I(className="fas fa-home me-2", style={"color": COLORS['text_muted'], "fontSize": "0.9rem"}),
+                    "Ministerio de Minas y Energía"
+                ], style={
+                    "fontSize": "0.85rem",
+                    "color": COLORS['text_muted'],
+                    "fontWeight": "500"
+                }),
+                html.Span(" / ", style={"color": COLORS['text_muted'], "margin": "0 0.5rem"}),
+                html.Span([
+                    html.I(className=f"{icono_pagina} me-2", style={"color": color_tema, "fontSize": "0.9rem"}),
+                    titulo_pagina
+                ], style={
+                    "fontSize": "0.85rem",
+                    "color": color_tema,
+                    "fontWeight": "600"
+                })
+            ], style={
+                "marginBottom": "1rem",
+                "paddingBottom": "0.5rem",
+                "borderBottom": f"1px solid {COLORS['border']}"
+            }),
+            
+            # Título principal de la página
+            html.H2([
+                html.I(className=f"{icono_pagina} me-3", style={"color": color_tema}),
+                titulo_pagina
+            ], style={
+                "color": COLORS['text_primary'],
+                "fontWeight": "600",
+                "fontSize": "1.75rem",
+                "marginBottom": "0.5rem"
+            }),
+            
+            # Descripción sutil de la página
+            html.P(descripcion_pagina, style={
+                "color": COLORS['text_secondary'],
+                "fontSize": "1rem",
+                "marginBottom": "0",
+                "lineHeight": "1.4"
+            }) if descripcion_pagina else None
+            
+        ], style={
+            "background": "linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(248,249,250,0.9) 100%)",
+            "borderRadius": "8px",
+            "padding": "1.5rem",
+            "marginBottom": "1.5rem",
+            "border": f"1px solid {COLORS['border']}",
+            "borderLeft": f"4px solid {color_tema}",
+            "boxShadow": "0 2px 4px rgba(0,0,0,0.05)"
+        })
+    ])
+
+def crear_boton_regresar():
+    """Crear botón para regresar al inicio"""
+    return dbc.Row([
+        dbc.Col([
+            dbc.Button([
+                html.I(className="fas fa-arrow-left me-2"),
+                "Volver al Inicio"
+            ], 
+            color="light", 
+            className="mb-4",
+            href="/",
+            style={
+                "border": "2px solid #dee2e6",
+                "color": COLORS['text_primary'],
+                "fontWeight": "500"
+            })
+        ], width="auto")
+    ])
+
+
+def crear_navbar():
+    """Barra de navegación eliminada (no se renderiza nada)"""
+    return None

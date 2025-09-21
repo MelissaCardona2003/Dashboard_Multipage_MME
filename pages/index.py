@@ -15,349 +15,362 @@ register_page(
     order=0
 )
 
-layout = html.Div([
-    # Sidebar desplegable
-    crear_sidebar_universal(),
-    
-    # Header uniforme
-    # Header principal de inicio (mantiene el diseño original)
-    crear_header(),
-    # Barra de navegación eliminada
-    
-    # Container principal
-    dbc.Container([
-        # Contenido principal (ahora ocupa todo el ancho)
-        dbc.Row([
-            dbc.Col([
-                # Bienvenida principal
-                dbc.Card([
-                    dbc.CardBody([
+# Definir los datos de las secciones principales del sector energético
+SECTOR_SECTIONS = {
+    "generacion": {
+        "title": "Generación",
+        "icon": "fas fa-bolt",
+        "color": COLORS['accent'],
+        "description": "Análisis de generación eléctrica por tecnología",
+        "path": "/generacion"
+    },
+    "transmision": {
+        "title": "Transmisión",
+        "icon": "fas fa-broadcast-tower",
+        "color": COLORS['transmision'],
+        "description": "Infraestructura de transmisión eléctrica",
+        "path": "/transmision"
+    },
+    "distribucion": {
+        "title": "Distribución",
+        "icon": "fas fa-project-diagram",
+        "color": COLORS['distribucion'],
+        "description": "Redes de distribución y consumo final",
+        "path": "/distribucion"
+    },
+    "demanda": {
+        "title": "Demanda",
+        "icon": "fas fa-chart-bar",
+        "color": COLORS['demanda'],
+        "description": "Análisis de demanda energética nacional",
+        "path": "/demanda"
+    },
+    "perdidas": {
+        "title": "Pérdidas",
+        "icon": "fas fa-exclamation-triangle",
+        "color": COLORS['perdidas'],
+        "description": "Análisis de pérdidas en el sistema eléctrico",
+        "path": "/perdidas"
+    },
+    "restricciones": {
+        "title": "Restricciones",
+        "icon": "fas fa-ban",
+        "color": COLORS['restricciones'],
+        "description": "Restricciones operativas del sistema",
+        "path": "/restricciones"
+    }
+}
+
+# Enlaces externos (como métricas)
+EXTERNAL_LINKS = [
+    {
+        "title": "Métricas",
+        "icon": "fas fa-tachometer-alt",
+        "color": "#FF5722",
+        "description": "Portal de métricas de XM",
+        "url": "/metricas"
+    }
+]
+
+def create_sector_icon_card(section_key, section_data):
+    """Crear tarjeta de ícono para cada sector principal con diseño mejorado"""
+    return dbc.Col([
+        html.A([
+            dbc.Card([
+                dbc.CardBody([
+                    html.Div([
+                        # Contenedor del ícono con efecto circular
                         html.Div([
-                            html.H2([
-                                html.I(className="fas fa-tachometer-alt me-3", style={"color": COLORS['primary']}),
-                                "Dashboard Energético Nacional"
-                            ], className="text-center mb-4", style={"color": COLORS['text_primary']}),
-                            
-                            html.P([
-                                "Bienvenido al sistema integral de análisis energético del ",
-                                html.Strong("Ministerio de Minas y Energía de Colombia", style={"color": COLORS['primary']}),
-                                ". Esta plataforma proporciona herramientas avanzadas para el análisis de proximidad entre granjas solares, comunidades energéticas, métricas del sistema eléctrico nacional y datos hidrológicos."
-                            ], className="text-center lead mb-4", style={"color": COLORS['text_secondary']}),
-                            
-                            # Estadísticas principales
-                            dbc.Row([
-                                dbc.Col([
-                                    dbc.Card([
-                                        dbc.CardBody([
-                                            html.H3("8", className="text-center mb-0", style={"color": COLORS['primary'], "fontSize": "3rem"}),
-                                            html.P("Módulos Activos", className="text-center mb-0", style={"color": COLORS['text_secondary']})
-                                        ])
-                                    ], color="primary", outline=True)
-                                ], md=3),
-                                dbc.Col([
-                                    dbc.Card([
-                                        dbc.CardBody([
-                                            html.H3("190+", className="text-center mb-0", style={"color": COLORS['secondary'], "fontSize": "3rem"}),
-                                            html.P("Métricas XM", className="text-center mb-0", style={"color": COLORS['text_secondary']})
-                                        ])
-                                    ], color="secondary", outline=True)
-                                ], md=3),
-                                dbc.Col([
-                                    dbc.Card([
-                                        dbc.CardBody([
-                                            html.H3("1000+", className="text-center mb-0", style={"color": COLORS['info'], "fontSize": "3rem"}),
-                                            html.P("Granjas Monitoreadas", className="text-center mb-0", style={"color": COLORS['text_secondary']})
-                                        ])
-                                    ], color="info", outline=True)
-                                ], md=3),
-                                dbc.Col([
-                                    dbc.Card([
-                                        dbc.CardBody([
-                                            html.H3("24/7", className="text-center mb-0", style={"color": COLORS['success'], "fontSize": "3rem"}),
-                                            html.P("Sistema Activo", className="text-center mb-0", style={"color": COLORS['text_secondary']})
-                                        ])
-                                    ], color="success", outline=True)
-                                ], md=3)
-                            ], className="mb-5"),
-                            
-                            html.Hr(),
-                            
-                            # Módulos disponibles
-                            html.H4([
-                                html.I(className="fas fa-th-large me-2", style={"color": COLORS['primary']}),
-                                "Módulos del Sistema"
-                            ], className="mb-4", style={"color": COLORS['text_primary']}),
-                            
-                            # Sección 1: Análisis y Métricas
-                            html.H5([
-                                html.I(className="fas fa-chart-bar me-2", style={"color": COLORS['primary']}),
-                                "Herramienta para explorar las métricas de XM"
-                            ], className="mb-3", style={"color": COLORS['primary']}),
-                            
-                            dbc.Row([
-                                dbc.Col([
-                                    dbc.Card([
-                                        dbc.CardBody([
-                                            html.H5([
-                                                html.I(className="fas fa-chart-line me-2", style={"color": COLORS['info']}),
-                                                "Métricas del Sistema XM"
-                                            ], style={"color": COLORS['info']}),
-                                            html.P("Acceso completo a las 190+ métricas oficiales del sistema eléctrico nacional a través de la API de XM. Consulta datos en tiempo real de generación, demanda, precios y transacciones comerciales con filtros avanzados y visualizaciones interactivas.",
-                                                   className="mb-3", style={"color": COLORS['text_secondary']}),
-                                            html.Ul([
-                                                html.Li("⚡ 190+ métricas oficiales de XM"),
-                                                html.Li("📈 Datos en tiempo real y históricos"),
-                                                html.Li("🔍 Filtros por métrica, entidad y fechas"),
-                                                html.Li("📋 Visualizaciones dinámicas Plotly"),
-                                                html.Li("� Exportación de datos y gráficos")
-                                            ], style={"color": COLORS['text_secondary'], "fontSize": "0.9rem"}),
-                                            dbc.Button([
-                                                html.I(className="fas fa-arrow-right me-2"),
-                                                "Consultar Métricas"
-                                            ], href="/metricas", color="info", className="w-100")
-                                        ])
-                                    ], className="h-100", style={'border': '2px solid #17a2b8'})
-                                ], md=12, className="mb-4")
-                            ]),
-                            
-                            html.Hr(className="my-4"),
-                            
-                            # Sección 2: Dashboards Especializados
-                            html.H5([
-                                html.I(className="fas fa-dashboard me-2", style={"color": COLORS['primary']}),
-                                "Dashboards Especializados"
-                            ], className="mb-3 mt-4", style={"color": COLORS['primary']}),
-                            
-                            dbc.Row([
-                                # Hidrología
-                                dbc.Col([
-                                    dbc.Card([
-                                        dbc.CardBody([
-                                            html.H5([
-                                                html.I(className="fas fa-tint me-2", style={"color": "#007bff"}),
-                                                "Análisis Hidrológico Integral"
-                                            ], style={"color": "#007bff"}),
-                                            html.P("Sistema completo de monitoreo hidrológico con datos de XM. Incluye seguimiento de caudales de ríos, análisis de aportes hídricos, gestión de embalses con niveles en tiempo real, y análisis de disponibilidad hídrica para generación hidroeléctrica. Filtros por región y río específico.",
-                                                   className="mb-3", style={"color": COLORS['text_secondary']}),
-                                            html.Ul([
-                                                html.Li("💧 Caudales de ríos en tiempo real"),
-                                                html.Li("🏔️ Niveles y capacidad de embalses"),
-                                                html.Li("📊 Análisis de aportes hídricos"),
-                                                html.Li("🔍 Filtros por región y río"),
-                                                html.Li("� Visualizaciones especializadas"),
-                                                html.Li("⚡ Indicadores de carga durante consultas")
-                                            ], style={"color": COLORS['text_secondary'], "fontSize": "0.9rem"}),
-                                            dbc.Button([
-                                                html.I(className="fas fa-arrow-right me-2"),
-                                                "Ver Dashboard"
-                                            ], href="/hidrologia", color="primary", className="w-100")
-                                        ])
-                                    ], className="h-100", style={'border': '2px solid #007bff'})
-                                ], md=6, className="mb-4"),
-                                
-                                # Demanda
-                                dbc.Col([
-                                    dbc.Card([
-                                        dbc.CardBody([
-                                            html.H5([
-                                                html.I(className="fas fa-chart-area me-2", style={"color": "#9932CC"}),
-                                                "Análisis de Demanda Energética"
-                                            ], style={"color": "#9932CC"}),
-                                            html.P("Dashboard especializado en el análisis integral de la demanda energética nacional. Incluye monitoreo de patrones de consumo temporal y geográfico, análisis de picos y valles de demanda, proyecciones futuras y segmentación por sectores industriales y residenciales.",
-                                                   className="mb-3", style={"color": COLORS['text_secondary']}),
-                                            html.Ul([
-                                                html.Li("📊 Patrones de consumo nacional"),
-                                                html.Li("📈 Análisis de picos y valles"),
-                                                html.Li("🏭 Segmentación por sectores"),
-                                                html.Li("📍 Análisis regional detallado"),
-                                                html.Li("⏰ Variaciones horarias y estacionales"),
-                                                html.Li("🔮 Proyecciones de demanda")
-                                            ], style={"color": COLORS['text_secondary'], "fontSize": "0.9rem"}),
-                                            dbc.Button([
-                                                html.I(className="fas fa-arrow-right me-2"),
-                                                "Ver Dashboard"
-                                            ], href="/demanda", color="secondary", className="w-100", style={"backgroundColor": "#9932CC", "borderColor": "#9932CC"})
-                                        ])
-                                    ], className="h-100", style={'border': '2px solid #9932CC'})
-                                ], md=6, className="mb-4")
-                            ]),
-                            
-                            html.Hr(className="my-4"),
-                            
-                            # Sección 3: Generación por Fuente
-                            html.H5([
-                                html.I(className="fas fa-bolt me-2", style={"color": COLORS['primary']}),
-                                "Dashboards de Generación por Fuente"
-                            ], className="mb-3 mt-4", style={"color": COLORS['primary']}),
-                            
-                            dbc.Row([
-                                # Solar
-                                dbc.Col([
-                                    dbc.Card([
-                                        dbc.CardBody([
-                                            html.H5([
-                                                html.I(className="fas fa-sun me-2", style={"color": "#FF8C00"}),
-                                                "Generación Solar Fotovoltaica"
-                                            ], style={"color": "#FF8C00"}),
-                                            html.P("Dashboard especializado en energía solar fotovoltaica con datos oficiales de XM. Monitoreo de radiación solar por regiones, análisis de eficiencia de plantas solares, seguimiento de producción nacional y evaluación del potencial solar por departamentos.",
-                                                   className="mb-3", style={"color": COLORS['text_secondary']}),
-                                            html.Ul([
-                                                html.Li("☀️ Radiación solar por regiones"),
-                                                html.Li("🔋 Eficiencia de plantas fotovoltaicas"),
-                                                html.Li("📍 Producción por departamentos"),
-                                                html.Li("📊 Análisis de potencial solar"),
-                                                html.Li("📈 Tendencias de generación"),
-                                                html.Li("🌤️ Variables meteorológicas")
-                                            ], style={"color": COLORS['text_secondary'], "fontSize": "0.9rem"}),
-                                            dbc.Button([
-                                                html.I(className="fas fa-arrow-right me-2"),
-                                                "Ver Dashboard"
-                                            ], href="/generacion-solar", className="w-100", style={"backgroundColor": "#FF8C00", "borderColor": "#FF8C00", "color": "white"})
-                                        ])
-                                    ], className="h-100", style={'border': '2px solid #FF8C00'})
-                                ], md=6, className="mb-4"),
-                                
-                                # Eólica
-                                dbc.Col([
-                                    dbc.Card([
-                                        dbc.CardBody([
-                                            html.H5([
-                                                html.I(className="fas fa-wind me-2", style={"color": "#20B2AA"}),
-                                                "Generación Eólica"
-                                            ], style={"color": "#20B2AA"}),
-                                            html.P("Análisis integral de energía eólica con datos de XM. Monitoreo de velocidades de viento, rendimiento de aerogeneradores, análisis de patrones estacionales, evaluación del recurso eólico y seguimiento de la producción en parques eólicos nacionales.",
-                                                   className="mb-3", style={"color": COLORS['text_secondary']}),
-                                            html.Ul([
-                                                html.Li("💨 Velocidades de viento por zonas"),
-                                                html.Li("🌪️ Rendimiento de aerogeneradores"),
-                                                html.Li("📅 Patrones estacionales"),
-                                                html.Li("🗺️ Mapas de recurso eólico"),
-                                                html.Li("⚡ Producción de parques eólicos"),
-                                                html.Li("📊 Factores de planta")
-                                            ], style={"color": COLORS['text_secondary'], "fontSize": "0.9rem"}),
-                                            dbc.Button([
-                                                html.I(className="fas fa-arrow-right me-2"),
-                                                "Ver Dashboard"
-                                            ], href="/generacion-eolica", className="w-100", style={"backgroundColor": "#20B2AA", "borderColor": "#20B2AA", "color": "white"})
-                                        ])
-                                    ], className="h-100", style={'border': '2px solid #20B2AA'})
-                                ], md=6, className="mb-4")
-                            ]),
-                            
-                            dbc.Row([
-                                # Biomasa
-                                dbc.Col([
-                                    dbc.Card([
-                                        dbc.CardBody([
-                                            html.H5([
-                                                html.I(className="fas fa-leaf me-2", style={"color": "#228B22"}),
-                                                "Generación por Biomasa"
-                                            ], style={"color": "#228B22"}),
-                                            html.P("Dashboard de energía renovable por biomasa con datos oficiales de XM. Seguimiento de disponibilidad de biomasa agrícola y forestal, eficiencia de plantas de cogeneración, análisis de gestión sostenible de residuos y evaluación del potencial energético por regiones.",
-                                                   className="mb-3", style={"color": COLORS['text_secondary']}),
-                                            html.Ul([
-                                                html.Li("🌾 Disponibilidad de biomasa por región"),
-                                                html.Li("🏭 Eficiencia de plantas de cogeneración"),
-                                                html.Li("♻️ Gestión sostenible de residuos"),
-                                                html.Li("🌱 Potencial energético renovable"),
-                                                html.Li("📊 Análisis de producción"),
-                                                html.Li("🌍 Impacto ambiental positivo")
-                                            ], style={"color": COLORS['text_secondary'], "fontSize": "0.9rem"}),
-                                            dbc.Button([
-                                                html.I(className="fas fa-arrow-right me-2"),
-                                                "Ver Dashboard"
-                                            ], href="/generacion-biomasa", className="w-100", style={"backgroundColor": "#228B22", "borderColor": "#228B22", "color": "white"})
-                                        ])
-                                    ], className="h-100", style={'border': '2px solid #228B22'})
-                                ], md=6, className="mb-4"),
-                                
-                                # Hidráulica
-                                dbc.Col([
-                                    dbc.Card([
-                                        dbc.CardBody([
-                                            html.H5([
-                                                html.I(className="fas fa-water me-2", style={"color": "#4682B4"}),
-                                                "Generación Hidráulica"
-                                            ], style={"color": "#4682B4"}),
-                                            html.P("Sistema especializado en generación hidroeléctrica con datos de XM. Monitoreo detallado de embalses nacionales, análisis de eficiencia de turbinado, gestión optimizada de recursos hídricos y seguimiento operativo de centrales hidroeléctricas.",
-                                                   className="mb-3", style={"color": COLORS['text_secondary']}),
-                                            html.Ul([
-                                                html.Li("🏔️ Monitoreo de embalses nacionales"),
-                                                html.Li("⚡ Análisis de eficiencia de turbinado"),
-                                                html.Li("🏗️ Operación de centrales hidroeléctricas"),
-                                                html.Li("🌊 Gestión optimizada de recursos"),
-                                                html.Li("📊 Capacidad de almacenamiento"),
-                                                html.Li("💧 Coordinación hídrica nacional")
-                                            ], style={"color": COLORS['text_secondary'], "fontSize": "0.9rem"}),
-                                            dbc.Button([
-                                                html.I(className="fas fa-arrow-right me-2"),
-                                                "Ver Dashboard"
-                                            ], href="/generacion-hidraulica", className="w-100", style={"backgroundColor": "#4682B4", "borderColor": "#4682B4", "color": "white"})
-                                        ])
-                                    ], className="h-100", style={'border': '2px solid #4682B4'})
-                                ], md=6, className="mb-4")
-                            ]),
-                            
-                            html.Hr(className="my-4"),
-                            
-                            # Información adicional
-                            dbc.Row([
-                                dbc.Col([
-                                    dbc.Alert([
-                                        html.H6([
-                                            html.I(className="fas fa-lightbulb me-2"),
-                                            "Funcionalidades Implementadas"
-                                        ], className="alert-heading"),
-                                        html.P([
-                                            "• ", html.Strong("Integración XM Completa:"), " Acceso directo a 190+ métricas oficiales del operador del mercado",
-                                            html.Br(),
-                                            "• ", html.Strong("Análisis Geoespacial:"), " Más de 1000 ubicaciones de granjas solares y comunidades energéticas",
-                                            html.Br(),
-                                            "• ", html.Strong("Visualizaciones Dinámicas:"), " Gráficos interactivos Plotly con exportación y filtros avanzados",
-                                            html.Br(),
-                                            "• ", html.Strong("Datos Hidrológicos:"), " Monitoreo en tiempo real de caudales, embalses y aportes hídricos"
-                                        ], className="mb-0")
-                                    ], color="info", className="mb-3"),
-                                ], md=6),
-                                
-                                dbc.Col([
-                                    dbc.Alert([
-                                        html.H6([
-                                            html.I(className="fas fa-cog me-2"),
-                                            "Tecnologías y Herramientas"
-                                        ], className="alert-heading"),
-                                        html.P([
-                                            "• ", html.Strong("Backend:"), " Python 3.10+, Dash 2.x, pydataxm",
-                                            html.Br(),
-                                            "• ", html.Strong("Visualización:"), " Plotly, Dash Bootstrap Components, Font Awesome",
-                                            html.Br(),
-                                            "• ", html.Strong("Datos:"), " APIs REST de XM, Pandas, NumPy, Geopy",
-                                            html.Br(),
-                                            "• ", html.Strong("UX:"), " Indicadores de carga, filtros inteligentes, exports automáticos"
-                                        ], className="mb-0")
-                                    ], color="secondary", className="mb-3"),
-                                ], md=6)
-                            ]),
-                            
-                            # Footer de información
+                            html.I(
+                                className=section_data["icon"],
+                                style={
+                                    "fontSize": "3.5rem",
+                                    "color": section_data["color"]
+                                }
+                            )
+                        ], 
+                        style={
+                            "width": "100px",
+                            "height": "100px",
+                            "borderRadius": "50%",
+                            "background": f"linear-gradient(135deg, {section_data['color']}15, {section_data['color']}25)",
+                            "border": f"3px solid {section_data['color']}40",
+                            "display": "flex",
+                            "alignItems": "center",
+                            "justifyContent": "center",
+                            "margin": "0 auto 1.5rem auto",
+                            "transition": "all 0.3s ease"
+                        },
+                        className="icon-container"),
+                        
+                        # Título del sector
+                        html.H4(section_data["title"],
+                               className="mb-3",
+                               style={
+                                   "color": COLORS['text_primary'], 
+                                   "fontWeight": "700",
+                                   "fontSize": "1.4rem",
+                                   "letterSpacing": "0.02em"
+                               }),
+                        
+                        # Descripción
+                        html.P(section_data["description"],
+                              className="text-muted mb-0",
+                              style={
+                                  "fontSize": "0.95rem",
+                                  "lineHeight": "1.5",
+                                  "color": COLORS['text_secondary']
+                              })
+                    ], className="text-center"),
+                ], className="py-4 px-3")
+            ],
+            className="h-100 border-0 sector-card",
+            style={
+                "borderRadius": "16px",
+                "transition": "all 0.4s cubic-bezier(0.4, 0, 0.2, 1)",
+                "cursor": "pointer",
+                "background": COLORS['bg_card'],
+                "boxShadow": f"0 4px 20px {COLORS['shadow_sm']}, 0 1px 3px {COLORS['shadow_md']}",
+                "border": f"1px solid {COLORS['border_light']}"
+            })
+        ],
+        href=section_data["path"],
+        style={"textDecoration": "none"},
+        className="sector-card-link")
+    ], width=12, md=6, xl=4, className="mb-4")
+
+def create_external_link_card(link):
+    """Crear tarjeta para enlaces externos con diseño mejorado"""
+    return dbc.Col([
+        html.A([
+            dbc.Card([
+                dbc.CardBody([
+                    html.Div([
+                        # Contenedor del ícono con efecto circular
+                        html.Div([
+                            html.I(
+                                className=link["icon"],
+                                style={
+                                    "fontSize": "3rem",
+                                    "color": link["color"]
+                                }
+                            )
+                        ], 
+                        style={
+                            "width": "80px",
+                            "height": "80px",
+                            "borderRadius": "50%",
+                            "background": f"linear-gradient(135deg, {link['color']}15, {link['color']}25)",
+                            "border": f"3px solid {link['color']}40",
+                            "display": "flex",
+                            "alignItems": "center",
+                            "justifyContent": "center",
+                            "margin": "0 auto 1.5rem auto",
+                            "transition": "all 0.3s ease"
+                        },
+                        className="icon-container"),
+                        
+                        # Título del enlace
+                        html.H5(link["title"],
+                               className="mb-2",
+                               style={
+                                   "color": COLORS['text_primary'], 
+                                   "fontWeight": "600",
+                                   "fontSize": "1.2rem"
+                               }),
+                        
+                        # Descripción
+                        html.P(link["description"],
+                              className="text-muted small mb-0",
+                              style={
+                                  "fontSize": "0.9rem",
+                                  "color": COLORS['text_secondary']
+                              })
+                    ], className="text-center"),
+                ], className="py-4 px-3")
+            ],
+            className="h-100 border-0 external-card",
+            style={
+                "borderRadius": "12px",
+                "transition": "all 0.3s ease",
+                "cursor": "pointer",
+                "background": COLORS['bg_card'],
+                "boxShadow": f"0 2px 8px {COLORS['shadow_sm']}",
+                "border": f"1px solid {COLORS['border_light']}"
+            })
+        ],
+        href=link["url"],
+        style={"textDecoration": "none"},
+        className="sector-card-link")
+    ], width=12, md=6, lg=4, className="mb-4")
+
+def layout(**kwargs):
+    """Layout principal de la página de inicio"""
+    return html.Div([
+        # Navbar
+        crear_navbar(),
+
+        # Hero Section - Encabezado principal mejorado
+        html.Div([
+            dbc.Container([
+                dbc.Row([
+                    dbc.Col([
+                        html.Div([
+                            # Icono del Ministerio
                             html.Div([
-                                html.P([
-                                    html.I(className="fas fa-info-circle me-2"),
-                                    "Sistema desarrollado para el análisis integral del sector energético colombiano - ",
-                                    html.Strong("Ministerio de Minas y Energía")
-                                ], className="text-center mb-2", style={"color": COLORS['text_secondary'], "fontSize": "0.9rem"}),
-                                html.P([
-                                    html.I(className="fas fa-calendar me-2"),
-                                    f"Última actualización: {datetime.now().strftime('%d/%m/%Y %H:%M')} | ",
-                                    html.I(className="fas fa-database me-2"),
-                                    "Datos sincronizados con XM - Operador del Mercado"
-                                ], className="text-center mb-0", style={"color": COLORS['text_secondary'], "fontSize": "0.8rem"})
-                            ], className="mt-4")
+                                html.I(
+                                    className="fas fa-bolt",
+                                    style={
+                                        "fontSize": "4rem",
+                                        "color": "#14B8A6",
+                                        "marginBottom": "1rem"
+                                    }
+                                )
+                            ]),
                             
+                            # Título principal
+                            html.H1([
+                                "Dashboard Energético Nacional"
+                            ],
+                            style={
+                                "fontSize": "3.5rem",
+                                "fontWeight": "800",
+                                "marginBottom": "1rem",
+                                "color": "#FFFFFF",
+                                "textShadow": "0 2px 4px rgba(0,0,0,0.3)",
+                                "letterSpacing": "-0.02em"
+                            }),
+                            
+                            # Subtítulo
+                            html.P([
+                                "Sistema integral de monitoreo y análisis del sector energético colombiano"
+                            ],
+                            style={
+                                "fontSize": "1.3rem",
+                                "opacity": "0.9",
+                                "maxWidth": "700px",
+                                "margin": "0 auto 2rem auto",
+                                "lineHeight": "1.6",
+                                "color": "#F1F5F9"
+                            }),
+                            
+                            # Fecha y hora de actualización
+                            html.Div([
+                                html.I(className="fas fa-clock me-2"),
+                                f"Última actualización: {datetime.now().strftime('%d/%m/%Y - %H:%M')} COT"
+                            ],
+                            style={
+                                "fontSize": "1rem",
+                                "opacity": "0.8",
+                                "color": "#CBD5E1",
+                                "fontWeight": "500"
+                            })
+                        ], className="text-center")
+                    ], width=12)
+                ])
+            ], fluid=True, className="py-5")
+        ], 
+        className="hero-section",
+        style={
+            "background": "linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #0D9488 100%)",
+            "minHeight": "60vh",
+            "display": "flex",
+            "alignItems": "center"
+        }),
+        
+        # Sección principal con subtítulo
+        html.Div([
+            dbc.Container([
+                dbc.Row([
+                    dbc.Col([
+                        html.Div([
+                            html.H2("Sectores del Sistema Energético",
+                                   style={
+                                       "color": COLORS['text_primary'],
+                                       "fontWeight": "700",
+                                       "fontSize": "2.5rem",
+                                       "marginBottom": "0.5rem",
+                                       "textAlign": "center"
+                                   }),
+                            html.P("Explore cada componente del sistema energético nacional",
+                                  style={
+                                      "color": COLORS['text_secondary'],
+                                      "fontSize": "1.1rem",
+                                      "textAlign": "center",
+                                      "marginBottom": "3rem"
+                                  })
                         ])
-                    ])
-                ], className="shadow-sm", style={'borderRadius': '15px'})
-            ], width=12)  # Ahora ocupa todo el ancho
-        ])
-    ], fluid=True, className="mt-4")
-], style={'backgroundColor': COLORS['bg_main'], 'minHeight': '100vh'})
+                    ], width=12)
+                ])
+            ], fluid=True)
+        ], className="py-5"),
+        
+        # Grid de sectores principales
+        html.Div([
+            dbc.Container([
+                dbc.Row([
+                    create_sector_icon_card(key, data)
+                    for key, data in SECTOR_SECTIONS.items()
+                ], className="g-4")
+            ], fluid=True)
+        ], className="pb-5"),
+        
+        # Sección de enlaces externos
+        html.Div([
+            dbc.Container([
+                dbc.Row([
+                    dbc.Col([
+                        html.H3("Herramientas Adicionales",
+                               style={
+                                   "color": COLORS['text_primary'],
+                                   "fontWeight": "600",
+                                   "fontSize": "2rem",
+                                   "marginBottom": "2rem",
+                                   "textAlign": "center"
+                               })
+                    ], width=12)
+                ]),
+                
+                dbc.Row([
+                    create_external_link_card(link)
+                    for link in EXTERNAL_LINKS
+                ], className="g-4", justify="center")
+                
+            ], fluid=True)
+        ], className="py-5", style={"background": COLORS['bg_section']}),
+        
+        # Footer informativo
+        html.Div([
+            dbc.Container([
+                dbc.Row([
+                    dbc.Col([
+                        dbc.Card([
+                            dbc.CardBody([
+                                html.Div([
+                                    html.I(className="fas fa-info-circle me-3",
+                                          style={"color": COLORS['info'], "fontSize": "1.5rem"}),
+                                    html.Div([
+                                        html.Strong("Información del Sistema", 
+                                                   style={"color": COLORS['text_primary'], "fontSize": "1.1rem"}),
+                                        html.Br(),
+                                        html.Small([
+                                            "Datos en tiempo real desde la API de XM (Operador del Sistema) • ",
+                                            "Información actualizada cada 5 minutos • ",
+                                            "Cobertura nacional del Sistema Interconectado"
+                                        ], 
+                                        className="text-muted",
+                                        style={"lineHeight": "1.6"})
+                                    ], style={"flex": "1"})
+                                ], style={"display": "flex", "alignItems": "center"})
+                            ])
+                        ], 
+                        className="border-0",
+                        style={"background": "rgba(255,255,255,0.8)", "backdropFilter": "blur(10px)"})
+                    ], width=12)
+                ])
+            ], fluid=True)
+        ], className="py-4"),
+
+        # Sidebar universal
+        crear_sidebar_universal()
+    ])
