@@ -43,6 +43,7 @@ COLORS = {
     'shadow_md': 'rgba(15, 23, 42, 0.08)',     # Sombra mediana  
     'shadow_lg': 'rgba(15, 23, 42, 0.12)',     # Sombra grande
     'shadow_accent': 'rgba(13, 148, 136, 0.15)', # Sombra de acento
+    'shadow': 'rgba(15, 23, 42, 0.08)',        # Sombra por defecto (compatibility)
     
     # Overlays y transparencias
     'overlay_light': 'rgba(255, 255, 255, 0.95)',

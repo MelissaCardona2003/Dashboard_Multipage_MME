@@ -17,9 +17,17 @@ app = Dash(
 try:
     from pages import index, metricas, demanda
     from pages import generacion_solar, generacion_eolica, generacion_biomasa, generacion_hidraulica
+    from pages import generacion_hidraulica_hidrologia, generacion, generacion_termica
+    from pages import transmision, transmision_lineas, transmision_subestaciones, transmision_congestion
+    from pages import distribucion, distribucion_calidad, distribucion_red, distribucion_transformadores
+    from pages import perdidas, perdidas_tecnicas, perdidas_comerciales, perdidas_indicadores
+    from pages import restricciones, restricciones_operativas, restricciones_ambientales, restricciones_regulatorias
+    from pages import demanda_historica, demanda_patrones, demanda_pronosticos
     print("✅ Todas las páginas importadas correctamente")
 except Exception as e:
     print(f"❌ Error importando páginas: {e}")
+    import traceback
+    traceback.print_exc()
 
 # Layout principal de la aplicación usando page_container
 app.layout = html.Div([
@@ -28,6 +36,11 @@ app.layout = html.Div([
 ])
 
 if __name__ == "__main__":
-    print("🚀 Iniciando servidor Dash...")
+    import os
+    port = int(os.environ.get('PORT', 8050))
+    print(f"🚀 Iniciando servidor Dash en puerto {port}...")
     print("📍 La aplicación estará disponible en: https://vps-0c525a03.vps.ovh.ca/")
-    app.run(debug=False, host='0.0.0.0', port=8000)
+    app.run(debug=False, host='0.0.0.0', port=port)
+
+# Exponer el servidor WSGI para Gunicorn
+server = app.server

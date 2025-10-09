@@ -201,18 +201,30 @@ register_page(
     order=2
 )
 # Inicializar API XM
+objetoAPI = None
+todas_las_metricas = pd.DataFrame()
+
 try:
-    objetoAPI = ReadDB()
-    todas_las_metricas = objetoAPI.get_collections()
-    print("API XM inicializada correctamente")
-    print(f"Métricas disponibles: {len(todas_las_metricas)}")
+    if PYDATAXM_AVAILABLE:
+        objetoAPI = ReadDB()
+        todas_las_metricas = objetoAPI.get_collections()
+        print("API XM inicializada correctamente")
+        print(f"Métricas disponibles: {len(todas_las_metricas)}")
+    else:
+        print("⚠️ pydataxm no está disponible - usando datos mock")
 except Exception as e:
     print(f"Error al inicializar API XM: {e}")
+    objetoAPI = None
     todas_las_metricas = pd.DataFrame()
 
 # Función para obtener opciones únicas de MetricId y Entity
 def get_metric_options():
-    if todas_las_metricas.empty:
+    print(f"🔍 [DEBUG] get_metric_options() llamada - todas_las_metricas está vacío: {todas_las_metricas.empty}")
+    print(f"🔍 [DEBUG] Forma de todas_las_metricas: {todas_las_metricas.shape}")
+    print(f"🔍 [DEBUG] objetoAPI disponible: {objetoAPI is not None}")
+    
+    if todas_las_metricas.empty or objetoAPI is None:
+        print("⚠️ [DEBUG] Retornando opciones vacías porque todas_las_metricas está vacío o objetoAPI es None")
         return [], []
     
     # Crear opciones de métricas y ordenarlas alfabéticamente por MetricName
@@ -239,6 +251,8 @@ def get_metric_options():
     return metric_options, entity_options
 
 metric_options, entity_options = get_metric_options()
+print(f"🔍 [DEBUG] Layout - metric_options: {len(metric_options)} opciones disponibles")
+print(f"🔍 [DEBUG] Layout - entity_options: {len(entity_options)} opciones disponibles")
 
 layout = html.Div([
     # Sidebar desplegable
@@ -279,6 +293,38 @@ layout = html.Div([
 
 # Layout del panel de controles energéticos
 def crear_panel_controles_metricas():
+    # Mostrar alerta si la API XM no está disponible
+    if objetoAPI is None or todas_las_metricas.empty:
+        return dbc.Card([
+            dbc.CardBody([
+                html.Div([
+                    html.I(className="fas fa-exclamation-triangle me-2", style={"color": "#DC2626"}),
+                    html.Strong("Servicio XM No Disponible", style={"fontSize": "1.1rem", "color": "#DC2626"})
+                ], className="mb-3 d-flex align-items-center"),
+                
+                dbc.Alert([
+                    html.H6([
+                        html.I(className="fas fa-plug me-2"),
+                        "Conexión con XM Interrumpida"
+                    ], className="alert-heading"),
+                    html.P([
+                        "No se pudo establecer conexión con los datos de XM. Esto puede deberse a:"
+                    ], className="mb-2"),
+                    html.Ul([
+                        html.Li("Problemas de conectividad a internet"),
+                        html.Li("La librería pydataxm no está instalada correctamente"),
+                        html.Li("Los servidores de XM están temporalmente no disponibles")
+                    ]),
+                    html.Hr(),
+                    html.P([
+                        html.Strong("Solución: "),
+                        "Verifica tu conexión a internet y recarga la página. ",
+                        "Si el problema persiste, contacta al administrador del sistema."
+                    ], className="mb-0")
+                ], color="danger")
+            ])
+        ], className="shadow-sm")
+    
     return dbc.Card([
         dbc.CardBody([
             html.Div([
@@ -478,7 +524,7 @@ def crear_guia_ingenieros():
                     "Esta guía ayuda a identificar las métricas XM más adecuadas para generar tableros específicos según las necesidades del Ministerio de Minas y Energía."
                 ], color="light", className="mb-3", style={'border': f'1px solid {COLORS["border"]}'})
             ])
-        ], className="mb-4", style={'border': f'1px solid {COLORS["border"]}', 'boxShadow': f'0 2px 4px {COLORS["shadow"]}'}),
+        ], className="mb-4", style={'border': f'1px solid {COLORS["border"]}', 'boxShadow': f'0 2px 4px {COLORS["shadow_md"]}'}),
         
         # Métricas críticas
         dbc.Card([
@@ -638,7 +684,7 @@ def crear_card_metrica_detallada(metric_id, info):
                     ", ".join(info['aplicaciones'])
                 ], className="mb-0", style={'color': COLORS['text_secondary'], 'fontSize': '0.8em'})
             ])
-        ], style={'height': '100%', 'border': f'1px solid {COLORS["border"]}', 'boxShadow': f'0 1px 3px {COLORS["shadow"]}'})
+        ], style={'height': '100%', 'border': f'1px solid {COLORS["border"]}', 'boxShadow': f'0 1px 3px {COLORS["shadow_sm"]}'})
     ], md=6, className="mb-3")
 
 # Callbacks originales para funcionalidad (actualizando IDs)
@@ -650,7 +696,7 @@ def crear_card_metrica_detallada(metric_id, info):
     [Input("metric-dropdown", "value")]
 )
 def update_entity_options(selected_metric):
-    if not selected_metric or todas_las_metricas.empty:
+    if not selected_metric or todas_las_metricas.empty or objetoAPI is None:
         return [], None
     
     # Filtrar las entidades disponibles para la métrica seleccionada
@@ -685,11 +731,19 @@ def update_entity_options(selected_metric):
      dash.dependencies.State("date-picker-range", "end_date")]
 )
 def display_metric_results(n_clicks, selected_metric, selected_entity, start_date, end_date):
+    print(f"🔍 [DEBUG] Callback ejecutado - n_clicks: {n_clicks}, metric: {selected_metric}, entity: {selected_entity}, dates: {start_date} to {end_date}")
+    print(f"🔍 [DEBUG] objetoAPI disponible: {objetoAPI is not None}, métricas cargadas: {len(todas_las_metricas)}")
+    
     if not n_clicks or not selected_metric:
+        print("⚠️ [DEBUG] Callback terminado - falta métrica o no hay clicks")
         return dbc.Alert("👆 Selecciona una métrica y haz clic en 'Consultar Datos Energéticos'", color="info", className="text-center")
     
-    if todas_las_metricas.empty:
-        return dbc.Alert("No hay métricas disponibles.", color="warning")
+    if todas_las_metricas.empty or objetoAPI is None:
+        return dbc.Alert([
+            html.I(className="fas fa-exclamation-triangle me-2"),
+            html.Strong("Servicio XM no disponible: "),
+            "No se pudieron cargar las métricas de XM. Verifica la conexión a internet y que la librería pydataxm esté correctamente instalada."
+        ], color="warning")
     
     metric_data = todas_las_metricas[todas_las_metricas['MetricId'] == selected_metric]
     
@@ -784,19 +838,33 @@ def display_metric_results(n_clicks, selected_metric, selected_entity, start_dat
                 ], md=12)
             ])
         ])
-    ], className="mb-4", style={'border': f'1px solid #DBEAFE', 'boxShadow': f'0 2px 4px {COLORS["shadow"]}'})
+    ], className="mb-4", style={'border': f'1px solid #DBEAFE', 'boxShadow': f'0 2px 4px {COLORS["shadow_md"]}'})
     
     
     # Si hay entidad y fechas seleccionadas, intentar consultar datos
     if selected_entity and start_date and end_date:
         try:
+            # Verificar que la API esté disponible
+            if objetoAPI is None:
+                api_error_alert = dbc.Alert([
+                    html.I(className="fas fa-exclamation-circle me-2"),
+                    html.Strong("API XM no disponible: "),
+                    "No se pudo inicializar la conexión con los datos de XM. ",
+                    "Verifica que la librería pydataxm esté instalada y que haya conectividad a internet."
+                ], color="danger", className="mt-3")
+                return html.Div([info_card, api_error_alert])
+            
             # Convertir fechas
             start_dt = dt.datetime.strptime(start_date, "%Y-%m-%d").date()
             end_dt = dt.datetime.strptime(end_date, "%Y-%m-%d").date()
             
             # Realizar consulta a la API
-            print(f"🔍 Consultando {selected_metric} para {selected_entity} desde {start_dt} hasta {end_dt}")
+            print(f"🔍 [DEBUG] Iniciando consulta API XM")
+            print(f"🔍 [DEBUG] Parámetros: metric={selected_metric}, entity={selected_entity}, start={start_dt}, end={end_dt}")
+            print(f"🔍 [DEBUG] Objeto API: {type(objetoAPI)}")
+            
             data = objetoAPI.request_data(selected_metric, selected_entity, start_dt, end_dt)
+            print(f"🔍 [DEBUG] Respuesta API: type={type(data)}, empty={data is None or (hasattr(data, 'empty') and data.empty)}")
             
             if data is not None and not data.empty:
                 print(f"✅ Datos obtenidos: {len(data)} registros")
@@ -887,16 +955,22 @@ def display_metric_results(n_clicks, selected_metric, selected_entity, start_dat
                 
                 return html.Div([info_card, columnas_info, data_table])
             else:
-                print("⚠️ No se encontraron datos en la consulta")
+                print("⚠️ [DEBUG] No se encontraron datos en la consulta")
+                print(f"⚠️ [DEBUG] Data returned: {data}")
+                if hasattr(data, 'shape'):
+                    print(f"⚠️ [DEBUG] Data shape: {data.shape}")
                 no_data_alert = dbc.Alert(
-                    "No se encontraron datos para los parámetros seleccionados.",
+                    "No se encontraron datos para los parámetros seleccionados. Intenta con un rango de fechas más amplio o una métrica diferente.",
                     color="warning",
                     className="mt-3"
                 )
                 return html.Div([info_card, no_data_alert])
                 
         except Exception as e:
-            print(f"❌ Error en la consulta: {str(e)}")
+            print(f"❌ [DEBUG] Error en la consulta: {str(e)}")
+            print(f"❌ [DEBUG] Error type: {type(e)}")
+            import traceback
+            print(f"❌ [DEBUG] Traceback: {traceback.format_exc()}")
             error_alert = dbc.Alert(
                 f"Error al consultar los datos: {str(e)}",
                 color="danger",

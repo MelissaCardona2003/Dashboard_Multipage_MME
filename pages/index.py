@@ -11,7 +11,7 @@ register_page(
     __name__,
     path="/",
     name="Inicio",
-    title="Dashboard Energético - Ministerio de Minas y Energía",
+    title="Portal energetico nacional - Ministerio de Minas y Energía",
     order=0
 )
 
@@ -228,9 +228,9 @@ def layout(**kwargs):
                                 )
                             ]),
                             
-                            # Título principal
+                            # Título principal (actualizado)
                             html.H1([
-                                "Dashboard Energético Nacional"
+                                "Portal energetico nacional"
                             ],
                             style={
                                 "fontSize": "3.5rem",

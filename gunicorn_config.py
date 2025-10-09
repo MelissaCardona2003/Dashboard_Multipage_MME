@@ -1,5 +1,5 @@
 # Configuración de Gunicorn para Dashboard MME
-bind = "127.0.0.1:8056"
+bind = "0.0.0.0:8050"
 workers = 2
 timeout = 120
 keepalive = 5

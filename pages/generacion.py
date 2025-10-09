@@ -16,11 +16,10 @@ register_page(
 # Definir las tecnologías de generación según la imagen con colores institucionales
 GENERACION_TECHNOLOGIES = [
     {"name": "Hidráulica", "path": "/generacion/hidraulica", "icon": "fas fa-water", "color": COLORS['energia_hidraulica'], "description": "Generación hidroeléctrica y embalses"},
-    {"name": "Hidrología", "path": "/generacion/hidraulica", "icon": "fas fa-tint", "color": COLORS['energia_hidraulica'], "description": "Análisis hidrológico y caudales"},
-    {"name": "Combustible fósil", "path": "/generacion/termica", "icon": "fas fa-fire", "color": COLORS['energia_termica'], "description": "Generación térmica con gas, carbón y combustóleo"},
-    {"name": "Eólica", "path": "/generacion/eolica", "icon": "fas fa-wind", "color": COLORS['energia_eolica'], "description": "Generación eólica terrestre y marina"},
-    {"name": "Biomasa", "path": "/generacion/biomasa", "icon": "fas fa-leaf", "color": COLORS['energia_biomasa'], "description": "Generación con biomasa y residuos"},
-    {"name": "Solar", "path": "/generacion/solar", "icon": "fas fa-sun", "color": COLORS['energia_solar'], "description": "Energía solar fotovoltaica y térmica"}
+    {"name": "Combustible fósil", "path": "/generacion/termica/fuente", "icon": "fas fa-fire", "color": COLORS['energia_termica'], "description": "Generación térmica con gas, carbón y combustóleo"},
+    {"name": "Eólica", "path": "/generacion/eolica/fuente", "icon": "fas fa-wind", "color": COLORS['energia_eolica'], "description": "Generación eólica terrestre y marina"},
+    {"name": "Biomasa", "path": "/generacion/biomasa/fuente", "icon": "fas fa-leaf", "color": COLORS['energia_biomasa'], "description": "Generación con biomasa y residuos"},
+    {"name": "Solar", "path": "/generacion/solar/fuente", "icon": "fas fa-sun", "color": COLORS['energia_solar'], "description": "Energía solar fotovoltaica y térmica"}
 ]
 
 def create_technology_card(tech):

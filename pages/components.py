@@ -83,30 +83,32 @@ def crear_sidebar_universal():
                 dbc.Accordion([
                     # GENERACIÓN
                     dbc.AccordionItem([
-                        dbc.NavLink([
-                            html.I(className="fas fa-water me-3", style={"color": "#2196F3"}),
-                            "Hidráulica"
-                        ], href="/generacion/hidraulica", active="exact", className="nav-link-sidebar ms-2 mb-1"),
-                        dbc.NavLink([
-                            html.I(className="fas fa-tint me-3", style={"color": "#03A9F4"}),
-                            "Hidrología"
-                        ], href="/generacion/hidraulica", active="exact", className="nav-link-sidebar ms-2 mb-1"),
+                        # Sub-acordeón para Hidráulica
+                        dbc.Accordion([
+                            dbc.AccordionItem([
+                                dbc.NavLink([
+                                    html.I(className="fas fa-tint me-3", style={"color": "#03A9F4"}),
+                                    "Hidrología"
+                                ], href="/generacion/hidraulica/hidrologia", active="exact", className="nav-link-sidebar ms-3 mb-1")
+                            ], title="💧 Hidráulica", item_id="hidraulica-sub")
+                        ], start_collapsed=True, className="ms-2 mb-2"),
+                        
                         dbc.NavLink([
                             html.I(className="fas fa-fire me-3", style={"color": "#E91E63"}),
                             "Combustible fósil"
-                        ], href="/generacion/termica", active="exact", className="nav-link-sidebar ms-2 mb-1"),
+                        ], href="/generacion/termica/fuente", active="exact", className="nav-link-sidebar ms-2 mb-1"),
                         dbc.NavLink([
                             html.I(className="fas fa-wind me-3", style={"color": "#4CAF50"}),
                             "Eólica"
-                        ], href="/generacion/eolica", active="exact", className="nav-link-sidebar ms-2 mb-1"),
+                        ], href="/generacion/eolica/fuente", active="exact", className="nav-link-sidebar ms-2 mb-1"),
                         dbc.NavLink([
                             html.I(className="fas fa-leaf me-3", style={"color": "#8BC34A"}),
                             "Biomasa"
-                        ], href="/generacion/biomasa", active="exact", className="nav-link-sidebar ms-2 mb-1"),
+                        ], href="/generacion/biomasa/fuente", active="exact", className="nav-link-sidebar ms-2 mb-1"),
                         dbc.NavLink([
                             html.I(className="fas fa-sun me-3", style={"color": "#FFC107"}),
                             "Solar"
-                        ], href="/generacion/solar", active="exact", className="nav-link-sidebar ms-2")
+                        ], href="/generacion/solar/fuente", active="exact", className="nav-link-sidebar ms-2")
                     ], title="⚡ Generación", item_id="generacion"),
                     
                     # TRANSMISIÓN
