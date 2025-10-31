@@ -12,11 +12,16 @@ Repositorio: Dashboard_Multipage_MME (rama `master`)
 Se cumplieron las 8 obligaciones contractuales fortaleciendo el sistema de información de la ENCE: 
 mapa interactivo de Colombia (seguimiento territorial), organización y sistematización de insumos, gestión documental con trazabilidad en GitHub, y optimización de performance e infraestructura.
 
+**Trabajo acumulado del mes (baseline sept. → 31 oct.):**
+
 • ⚡ Carga 85% más rápida (15–20s → 2–3s)  
 • 📡 −87% de peticiones a API/hora (1.200 → 150)  
 • 🗺️ Mapa con 7 regiones y 28 puntos, colores por región y semáforo  
-• �️ 5 documentos técnicos + 2 informes publicados  
-• 🧩 Código modular en `/utils`, scripts en `/scripts`, docs en `/docs`
+• 🗂️ 5 documentos técnicos + 2 informes publicados  
+• 🧩 Código modular en `/utils`, scripts en `/scripts`, docs en `/docs`  
+• 📊 **31 tableros** mejorados (100% de cobertura): visualizaciones dinámicas, fichas KPI, gráficos profesionales  
+• 🎨 Nuevos assets: CSS dedicado, portada interactiva (JS), logo institucional  
+• 🏗️ **84 archivos** gestionados; +9.215 inserciones / −2.297 eliminaciones (neto **+6.918 líneas**)
 
 ---
 
@@ -65,15 +70,31 @@ Evidencia: diffs en `a28b45e` y logs de verificación.
 | Uso de memoria | 450 MB | 280 MB | −38% |
 | Uptime esperado | ~95% | ~99,5% | +4,5 pp |
 | Docs publicados | 2 | 7 | +250% |
+| Tableros mejorados | 15 | 31 | +107% |
+| Líneas de código netas | ~12.800 | ~19.700 | +54% |
 
 ---
 
-## � Entregables del periodo
+## 🚀 Entregables del periodo
 
-- Código: 74 archivos gestionados; +7.441/−1.309 líneas (neto +6.132)
-- Documentación: 5 docs técnicos en `/docs` + 2 informes en raíz
-- Infraestructura: Nginx + systemd + scripts de operación/backup
-- Visualizaciones: mapa Colombia, semáforos unificados, gráficos estandarizados
+**Código y visualizaciones:**
+- 84 archivos gestionados; +9.215/−2.297 líneas (neto **+6.918**)
+- **31 tableros** actualizados (100% de cobertura del dashboard):
+  - `generacion_fuentes_unificado.py`: +1.729 líneas (categorización automática, fichas KPI, gráficos dinámicos)
+  - `generacion_hidraulica_hidrologia.py`: +1.073 líneas (mapa Colombia, 28 embalses, 7 regiones, semáforos)
+  - `generacion.py`: +539 líneas (restructuración de layout)
+  - `index_simple_working.py`: +326 líneas (portada interactiva con animaciones)
+  - Otros 27 tableros: migración a `/utils`, estandarización de semáforos y colores
+
+**Documentación:**
+- 5 docs técnicos en `/docs` + 2 informes en raíz
+
+**Infraestructura:**
+- Nginx + systemd + scripts de operación/backup
+- Sistema de caché con scripts de mantenimiento (`/scripts`)
+
+**Assets visuales:**
+- `generacion-page.css` (366 líneas), `kpi-override.css`, `info-button.css`, `portada-interactive.js`, logo institucional
 
 ---
 
@@ -86,4 +107,5 @@ Evidencia: diffs en `a28b45e` y logs de verificación.
 ---
 
 Melissa Cardona – 31 de octubre de 2025  
-Commits del período: `a28b45e`, `9a2e059`, `a1e0579`
+Commits del período: `ea67ce9` → `a28b45e`, `9a2e059`, `a1e0579`, `96c4447`  
+**84 archivos | +6.918 líneas netas | 31 tableros mejorados**
