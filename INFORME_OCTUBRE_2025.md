@@ -3,12 +3,8 @@
 
 Contratista: Melissa Cardona  
 Período de reporte: 30 de septiembre – 31 de octubre de 2025  
-Supervisor: [Nombre del supervisor]  
 Repositorio: Dashboard_Multipage_MME (rama `master`)  
-Commits relevantes del período: `a28b45e`, `9a2e059`, `a1e0579`
-
 ---
-
 ## 0) Resumen ejecutivo
 
 Durante el periodo se cumplieron las 8 obligaciones contractuales asignadas, fortaleciendo el sistema de información de la Estrategia Nacional de Comunidades Energéticas (ENCE) en cuatro frentes: i) seguimiento y análisis geográfico de postulaciones, ii) organización y sistematización de insumos para productos analíticos, iii) gestión documental y trazabilidad en GitHub, y iv) performance e infraestructura para operación estable. 
