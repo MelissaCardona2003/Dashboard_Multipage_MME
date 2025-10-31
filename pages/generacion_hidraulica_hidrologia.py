@@ -6,6 +6,8 @@ def get_plotly_modules():
     return px, go
 
 from dash import dcc, html, Input, Output, State, callback, register_page
+import dash_table
+import plotly.express as px
 import dash_bootstrap_components as dbc
 import pandas as pd
 from datetime import date, timedelta, datetime
@@ -29,8 +31,9 @@ except ImportError:
 # Los caudales son medidas volumétricas, no energéticas
 
 # Imports locales para componentes uniformes
-from .components import crear_header, crear_navbar, crear_sidebar_universal, crear_boton_regresar
-from .config import COLORS
+from utils.components import crear_header, crear_navbar, crear_sidebar_universal, crear_boton_regresar
+from utils.config import COLORS
+from utils.embalses_coordenadas import REGIONES_COORDENADAS, obtener_coordenadas_region
 # from .api_fallback import create_fallback_data, create_api_status_message, save_api_status
 
 warnings.filterwarnings("ignore")
@@ -74,7 +77,7 @@ def format_date(date_value):
 
 
 # Inicializar API XM de forma perezosa usando el helper
-from ._xm import get_objetoAPI
+from utils._xm import get_objetoAPI, fetch_metric_data
 API_STATUS = None
 
 # Verificar si la API está disponible al inicializar el módulo
@@ -170,8 +173,7 @@ def get_reservas_hidricas(fecha):
     if resultado:
         return resultado['porcentaje'], resultado['volumen_gwh']
     else:
-# REMOVED DEBUG:         print("[DEBUG] Función unificada falló, usando valores simulados")
-        return 82.48, 14139.8265  # Valores de ejemplo basados en XM
+        return None, None
 
 
 def get_aportes_hidricos(fecha):
@@ -186,13 +188,8 @@ def get_aportes_hidricos(fecha):
     Returns:
         tuple: (porcentaje, valor_GWh) o (None, None) si hay error
     """
-    objetoAPI = get_objetoAPI()  # Obtener la API cuando se necesita
+    # Usar fetch_metric_data que tiene cache con datos históricos
 # REMOVED DEBUG:     print(f"[DEBUG] get_aportes_hidricos llamada con fecha: {fecha}")
-# REMOVED DEBUG:     print(f"[DEBUG] objetoAPI está disponible: {objetoAPI is not None}")
-
-    if not objetoAPI:
-        print("[HIDROLOGIA] ❌ API XM no disponible - no se pueden obtener Aportes Hídricos")
-        return None, None
 
     try:
         # Calcular el rango desde el primer día del mes hasta la fecha final
@@ -200,69 +197,46 @@ def get_aportes_hidricos(fecha):
         fecha_inicio = fecha_final.replace(day=1)
         fecha_inicio_str = fecha_inicio.strftime('%Y-%m-%d')
         fecha_final_str = fecha_final.strftime('%Y-%m-%d')
-        
-# REMOVED DEBUG:         print(f"[DEBUG] Calculando aportes acumulados desde {fecha_inicio_str} hasta {fecha_final_str}")
 
-        # Obtener aportes energía usando métrica principal de XM
-# REMOVED DEBUG:         print(f"[DEBUG] Obteniendo AporEner (Aportes Energía) del mes")
-        aportes_diarios = objetoAPI.request_data('AporEner', 'Sistema', fecha_inicio_str, fecha_final_str)
-        
+        # Obtener aportes energía usando métrica principal de XM con cache histórico
+        aportes_diarios = fetch_metric_data('AporEner', 'Sistema', fecha_inicio_str, fecha_final_str)
+
         # Si no funciona, intentar con métricas alternativas
         if aportes_diarios is None or aportes_diarios.empty:
             metricas_aportes = ['AportesDiariosEnergia', 'AportesEnergia']
             for metrica in metricas_aportes:
                 try:
-# REMOVED DEBUG:                     print(f"[DEBUG] Intentando métrica alternativa de aportes: {metrica}")
-                    aportes_diarios = objetoAPI.request_data(metrica, 'Sistema', fecha_inicio_str, fecha_final_str)
+                    aportes_diarios = fetch_metric_data(metrica, 'Sistema', fecha_inicio_str, fecha_final_str)
                     if aportes_diarios is not None and not aportes_diarios.empty:
-# REMOVED DEBUG:                         print(f"[DEBUG] ✅ Métrica {metrica} funcionó")
                         break
-                except Exception as e:
-# REMOVED DEBUG:                     print(f"[DEBUG] ❌ Métrica {metrica} falló: {e}")
+                except Exception:
                     continue
 
         # Obtener media histórica usando métrica principal de XM
-# REMOVED DEBUG:         print(f"[DEBUG] Obteniendo AporEnerMediHist (Media Histórica) del mes")
-        media_historica = objetoAPI.request_data('AporEnerMediHist', 'Sistema', fecha_inicio_str, fecha_final_str)
-        
+        media_historica = fetch_metric_data('AporEnerMediHist', 'Sistema', fecha_inicio_str, fecha_final_str)
+
         # Si no funciona, intentar con métricas alternativas
         if media_historica is None or media_historica.empty:
             metricas_media = ['MediaHistoricaAportes', 'AportesMediaHistorica']
             for metrica in metricas_media:
                 try:
-# REMOVED DEBUG:                     print(f"[DEBUG] Intentando métrica alternativa de media histórica: {metrica}")
-                    media_historica = objetoAPI.request_data(metrica, 'Sistema', fecha_inicio_str, fecha_final_str)
+                    media_historica = fetch_metric_data(metrica, 'Sistema', fecha_inicio_str, fecha_final_str)
                     if media_historica is not None and not media_historica.empty:
-# REMOVED DEBUG:                         print(f"[DEBUG] ✅ Métrica {metrica} funcionó")
                         break
-                except Exception as e:
-# REMOVED DEBUG:                     print(f"[DEBUG] ❌ Métrica {metrica} falló: {e}")
+                except Exception:
                     continue
-
-# REMOVED DEBUG:         print(f"[DEBUG] Aportes data: {aportes_diarios.shape if aportes_diarios is not None and not aportes_diarios.empty else 'vacío'}")
-# REMOVED DEBUG:         print(f"[DEBUG] Media histórica data: {media_historica.shape if media_historica is not None and not media_historica.empty else 'vacío'}")
 
         if aportes_diarios is not None and not aportes_diarios.empty and media_historica is not None and not media_historica.empty:
             # Calcular el promedio acumulado del mes hasta la fecha final (igual que XM)
             aportes_valor = aportes_diarios['Value'].mean()
             media_valor = media_historica['Value'].mean()
-            
-# REMOVED DEBUG:             print(f"[DEBUG] Promedio aportes del mes: {aportes_valor} GWh")
-# REMOVED DEBUG:             print(f"[DEBUG] Promedio media histórica del mes: {media_valor} GWh")
-            
             if media_valor > 0:
-                # Fórmula exacta de XM
                 porcentaje = round((aportes_valor / media_valor) * 100, 2)
-# REMOVED DEBUG:                 print(f"[DEBUG] Aportes hídricos calculados: {porcentaje}%")
                 return porcentaje, aportes_valor
-
-# REMOVED DEBUG:         print("[DEBUG] Datos insuficientes para calcular aportes - usando valores simulados")
-        return 101.2, 208.28  # Valores de ejemplo basados en XM
-
+        return None, None
     except Exception as e:
         print(f"[HIDROLOGIA] Error obteniendo aportes hídricos: {e}")
-# REMOVED DEBUG:         print("[DEBUG] Error en API, usando valores simulados basados en XM")
-        return 101.2, 208.28
+        return None, None
 
 
 # --- FUNCIÓN UNIFICADA PARA CÁLCULOS DE VOLUMEN ÚTIL ---
@@ -286,77 +260,72 @@ def calcular_volumen_util_unificado(fecha, region=None, embalse=None):
             'embalses': list      # Lista de embalses incluidos en el cálculo
         } o None si hay error
     """
-    objetoAPI = get_objetoAPI()  # Obtener la API cuando se necesita
     print(f"[UNIFICADO] Calculando volumen útil - Fecha: {fecha}, Región: {region}, Embalse: {embalse}")
-    
-    if not objetoAPI:
-        print("[UNIFICADO] ❌ API XM no disponible")
-        return None
     
     try:
         # Función para encontrar la fecha más reciente con datos
         def encontrar_fecha_con_datos_unificada(fecha_inicial):
             for dias_atras in range(7):  # Buscar hasta 7 días atrás
                 fecha_prueba = (datetime.strptime(fecha_inicial, '%Y-%m-%d') - timedelta(days=dias_atras)).strftime('%Y-%m-%d')
-                df_vol_test = objetoAPI.request_data('VoluUtilDiarEner', 'Embalse', fecha_prueba, fecha_prueba)
-                df_cap_test = objetoAPI.request_data('CapaUtilDiarEner', 'Embalse', fecha_prueba, fecha_prueba)
+                df_vol_test = fetch_metric_data('VoluUtilDiarEner', 'Embalse', fecha_prueba, fecha_prueba)
+                df_cap_test = fetch_metric_data('CapaUtilDiarEner', 'Embalse', fecha_prueba, fecha_prueba)
                 if (df_vol_test is not None and not df_vol_test.empty and 
                     df_cap_test is not None and not df_cap_test.empty):
                     print(f"[UNIFICADO] Usando fecha con datos: {fecha_prueba}")
                     return fecha_prueba, df_vol_test, df_cap_test
             return None, None, None
-        
+
         # Buscar fecha con datos disponibles
         fecha_final, df_vol, df_cap = encontrar_fecha_con_datos_unificada(fecha)
-        
+
         if df_vol is None or df_vol.empty or df_cap is None or df_cap.empty:
             print("[UNIFICADO] ❌ No se pudieron obtener datos de la API para ninguna fecha reciente")
             return None
-        
+
         print(f"[UNIFICADO] Datos obtenidos: {len(df_vol)} registros de volumen, {len(df_cap)} registros de capacidad")
-        
+
         # Obtener información de embalses y regiones
         today = datetime.now().strftime('%Y-%m-%d')
         yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-        embalses_info = objetoAPI.request_data('ListadoEmbalses','Sistema', yesterday, today)
+        embalses_info = fetch_metric_data('ListadoEmbalses','Sistema', yesterday, today)
         embalses_info['Values_Name'] = embalses_info['Values_Name'].str.strip().str.upper()
         embalses_info['Values_HydroRegion'] = embalses_info['Values_HydroRegion'].str.strip().str.title()
         embalse_region_dict = dict(zip(embalses_info['Values_Name'], embalses_info['Values_HydroRegion']))
-        
+
         # Mapear región a cada embalse
         df_vol['Region'] = df_vol['Name'].map(embalse_region_dict)
         df_cap['Region'] = df_cap['Name'].map(embalse_region_dict)
-        
+
         # Aplicar filtros según los parámetros
         if region:
             region_normalized = region.strip().title()
             df_vol = df_vol[df_vol['Region'] == region_normalized]
             df_cap = df_cap[df_cap['Region'] == region_normalized]
             print(f"[UNIFICADO] Filtrado por región '{region_normalized}': {len(df_vol)} embalses con volumen, {len(df_cap)} con capacidad")
-        
+
         if embalse:
             df_vol = df_vol[df_vol['Name'] == embalse]
             df_cap = df_cap[df_cap['Name'] == embalse]
             print(f"[UNIFICADO] Filtrado por embalse '{embalse}': {len(df_vol)} registros de volumen, {len(df_cap)} de capacidad")
-        
+
         if df_vol.empty or df_cap.empty:
             print(f"[UNIFICADO] ❌ Sin datos después del filtrado")
             return None
-        
+
         # Calcular totales usando la fórmula exacta
         # Convertir de Wh a GWh (las métricas de XM vienen en Wh)
         vol_total_gwh = df_vol['Value'].sum() / 1e9
         cap_total_gwh = df_cap['Value'].sum() / 1e9
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
+
         embalses_incluidos = list(set(df_vol['Name'].tolist()) & set(df_cap['Name'].tolist()))
-        
+
         print(f"[UNIFICADO] Totales calculados: Volumen = {vol_total_gwh:.2f} GWh, Capacidad = {cap_total_gwh:.2f} GWh")
         print(f"[UNIFICADO] Embalses incluidos: {embalses_incluidos}")
-        
+
         if cap_total_gwh > 0:
             porcentaje = round((vol_total_gwh / cap_total_gwh) * 100, 2)
             print(f"[UNIFICADO] Porcentaje calculado: {porcentaje}%")
-            
+
             return {
                 'porcentaje': porcentaje,
                 'volumen_gwh': vol_total_gwh,
@@ -366,7 +335,7 @@ def calcular_volumen_util_unificado(fecha, region=None, embalse=None):
         else:
             print("[UNIFICADO] ❌ Capacidad total es 0")
             return None
-            
+
     except Exception as e:
         print(f"[UNIFICADO] Error en cálculo: {e}")
         import traceback
@@ -407,12 +376,7 @@ def get_aportes_hidricos_por_region(fecha, region):
     Returns:
         tuple: (porcentaje, valor_GWh) o (None, None) si hay error
     """
-    objetoAPI = get_objetoAPI()
 # REMOVED DEBUG:     print(f"[DEBUG] get_aportes_hidricos_por_region llamada con fecha: {fecha}, región: {region}")
-    
-    if not objetoAPI:
-        print("[HIDROLOGIA] ❌ API XM no disponible - no se pueden obtener Aportes Hídricos por región")
-        return None, None
     
     try:
         # Calcular el rango desde el primer día del mes hasta la fecha final
@@ -421,8 +385,8 @@ def get_aportes_hidricos_por_region(fecha, region):
         fecha_inicio_str = fecha_inicio.strftime('%Y-%m-%d')
         fecha_final_str = fecha_final.strftime('%Y-%m-%d')
         
-        # Obtener aportes energía por río (método XM)
-        aportes_data = objetoAPI.request_data('AporEner', 'Rio', fecha_inicio_str, fecha_final_str)
+        # Obtener aportes energía por río con cache histórico
+        aportes_data = fetch_metric_data('AporEner', 'Rio', fecha_inicio_str, fecha_final_str)
         
         if aportes_data is not None and not aportes_data.empty:
             # Asignar región a cada río
@@ -438,7 +402,7 @@ def get_aportes_hidricos_por_region(fecha, region):
                 aportes_total_region = aportes_region.groupby('Date')['Value'].sum().mean()
                 
                 # Obtener media histórica para la región
-                media_historica_data = objetoAPI.request_data('AporEnerMediHist', 'Rio', fecha_inicio_str, fecha_final_str)
+                media_historica_data = fetch_metric_data('AporEnerMediHist', 'Rio', fecha_inicio_str, fecha_final_str)
                 
                 if media_historica_data is not None and not media_historica_data.empty:
                     media_historica_data['Region'] = media_historica_data['Name'].map(rio_region)
@@ -475,16 +439,11 @@ def get_aportes_hidricos_por_rio(fecha, rio):
     Returns:
         tuple: (porcentaje, valor_m3s) o (None, None) si hay error
     """
-    objetoAPI = get_objetoAPI()
 # REMOVED DEBUG:     print(f"[DEBUG] get_aportes_hidricos_por_rio llamada con fecha: {fecha}, río: {rio}")
     
-    if not objetoAPI:
-        print("[HIDROLOGIA] ❌ API XM no disponible - no se pueden obtener Aportes Hídricos por río")
-        return None, None
-    
     try:
-        # Obtener aportes del río específico
-        aportes_data = objetoAPI.request_data('AporCaudal', 'Rio', fecha, fecha)
+        # Obtener aportes del río específico con cache histórico
+        aportes_data = fetch_metric_data('AporCaudal', 'Rio', fecha, fecha)
         
         if aportes_data is not None and not aportes_data.empty:
             # Buscar el río específico
@@ -511,12 +470,11 @@ def get_aportes_hidricos_por_rio(fecha, rio):
 
 # Obtener la relación río-región directamente desde la API XM
 def get_rio_region_dict():
-    objetoAPI = get_objetoAPI()
     try:
-        # Usar fecha actual para obtener listado más reciente
+        # Usar fecha actual para obtener listado más reciente con cache histórico
         today = datetime.now().strftime('%Y-%m-%d')
         yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
-        df = objetoAPI.request_data('ListadoRios', 'Sistema', yesterday, today)
+        df = fetch_metric_data('ListadoRios', 'Sistema', yesterday, today)
         if 'Values_Name' in df.columns and 'Values_HydroRegion' in df.columns:
             # Normalizar nombres igual que antes
             df['Values_Name'] = df['Values_Name'].str.strip().str.upper()
@@ -544,10 +502,9 @@ def get_region_options():
     Filtra regiones que no tienen datos para evitar confusión al usuario.
     """
     rio_region = ensure_rio_region_loaded()
-    objetoAPI = get_objetoAPI()
     try:
-        # Obtener ríos con datos de caudal recientes
-        df = objetoAPI.request_data('AporCaudal', 'Rio', (date.today() - timedelta(days=30)).strftime('%Y-%m-%d'), date.today().strftime('%Y-%m-%d'))
+        # Obtener ríos con datos de caudal recientes con cache histórico
+        df = fetch_metric_data('AporCaudal', 'Rio', (date.today() - timedelta(days=30)).strftime('%Y-%m-%d'), date.today().strftime('%Y-%m-%d'))
         if 'Name' in df.columns:
             rios_con_datos = set(df['Name'].unique())
             # Filtrar solo regiones que tienen ríos con datos
@@ -569,12 +526,9 @@ def get_region_options():
 
 # --- NUEVO: Función para obtener todos los ríos únicos desde la API ---
 def get_all_rios_api():
-    objetoAPI = get_objetoAPI()
-    if objetoAPI is None:
-        return []
     try:
-        df = objetoAPI.request_data('AporCaudal', 'Rio', '2000-01-01', date.today().strftime('%Y-%m-%d'))
-        if 'Name' in df.columns:
+        df = fetch_metric_data('AporCaudal', 'Rio', '2000-01-01', date.today().strftime('%Y-%m-%d'))
+        if df is not None and 'Name' in df.columns:
             rios = sorted(df['Name'].dropna().unique())
             return rios
         else:
@@ -583,13 +537,9 @@ def get_all_rios_api():
         return []
 
 def get_rio_options(region=None):
-    objetoAPI = get_objetoAPI()
-    if objetoAPI is None:
-        print("API XM no inicializada")
-        return []
     try:
-        df = objetoAPI.request_data('AporCaudal', 'Rio', (date.today() - timedelta(days=30)).strftime('%Y-%m-%d'), date.today().strftime('%Y-%m-%d'))
-        if 'Name' in df.columns:
+        df = fetch_metric_data('AporCaudal', 'Rio', (date.today() - timedelta(days=30)).strftime('%Y-%m-%d'), date.today().strftime('%Y-%m-%d'))
+        if df is not None and 'Name' in df.columns:
             rios = sorted(df['Name'].dropna().unique())
             if region:
                 rio_region = ensure_rio_region_loaded()
@@ -638,20 +588,417 @@ def crear_estilos_condicionales_para_tabla_estatica(start_date=None, end_date=No
         ]
 
 
+# ============================================================================
+# FUNCIONES PARA MAPA DE EMBALSES POR REGIÓN
+# ============================================================================
+
+def calcular_semaforo_embalse(participacion, volumen_pct):
+    """
+    Calcula el nivel de riesgo según la lógica del semáforo hidrológico de XM:
+    
+    Factor 1: Importancia Estratégica (participación > 10%)
+    Factor 2: Disponibilidad Hídrica (% volumen útil)
+    
+    RIESGO ALTO (🔴): Embalses estratégicos (>10%) con volumen crítico (<30%)
+    RIESGO MEDIO (🟡): Embalses estratégicos con volumen bajo (30-70%) o embalses pequeños con volumen crítico
+    RIESGO BAJO (🟢): Embalses con volumen adecuado (≥70%) independientemente de su tamaño
+    
+    Args:
+        participacion: % de participación en el sistema (0-100)
+        volumen_pct: % de volumen útil disponible (0-100)
+    
+    Returns:
+        tuple: (nivel_riesgo, color, mensaje)
+    """
+    es_estrategico = participacion >= 10
+    
+    if volumen_pct >= 70:
+        return 'BAJO', '#28a745', '✅'
+    elif volumen_pct >= 30:
+        if es_estrategico:
+            return 'MEDIO', '#ffc107', '⚡'
+        else:
+            return 'BAJO', '#28a745', '✅'
+    else:  # volumen_pct < 30
+        if es_estrategico:
+            return 'ALTO', '#dc3545', '🚨'
+        else:
+            return 'MEDIO', '#ffc107', '⚡'
+
+def obtener_datos_embalses_por_region():
+    """
+    Obtiene los datos de embalses agrupados por región hidrológica
+    
+    Returns:
+        dict: {region: {embalses: [...], riesgo_max: str, color: str, lat: float, lon: float}}
+    """
+    try:
+        # Obtener fecha actual
+        fecha_hoy = date.today()
+        
+        # Buscar datos en los últimos 7 días
+        df_vol, df_cap, df_listado = None, None, None
+        for dias_atras in range(7):
+            fecha_busqueda = fecha_hoy - timedelta(days=dias_atras)
+            fecha_str = fecha_busqueda.strftime('%Y-%m-%d')
+            
+            # Obtener volumen, capacidad y listado de embalses
+            df_vol_temp = fetch_metric_data('VoluUtilDiarEner', 'Embalse', fecha_str, fecha_str)
+            df_cap_temp = fetch_metric_data('CapaUtilDiarEner', 'Embalse', fecha_str, fecha_str)
+            df_listado_temp = fetch_metric_data('ListadoEmbalses', 'Sistema', fecha_str, fecha_str)
+            
+            if (df_vol_temp is not None and not df_vol_temp.empty and 
+                df_cap_temp is not None and not df_cap_temp.empty and
+                df_listado_temp is not None and not df_listado_temp.empty):
+                df_vol = df_vol_temp
+                df_cap = df_cap_temp
+                df_listado = df_listado_temp
+                print(f"✅ Datos de embalses obtenidos para {fecha_str}")
+                break
+        
+        if df_vol is None or df_cap is None or df_listado is None:
+            print("❌ No se pudieron obtener datos de embalses")
+            return None
+        
+        # Detectar nombre de columnas (mismo código que en las tablas)
+        col_value_vol = None
+        col_value_cap = None
+        col_name_vol = None
+        
+        # Buscar columna de valores
+        for col in ['Values_code', 'Value', 'Values_Code']:
+            if col in df_vol.columns:
+                col_value_vol = col
+                break
+        
+        for col in ['Values_code', 'Value', 'Values_Code']:
+            if col in df_cap.columns:
+                col_value_cap = col
+                break
+        
+        # Buscar columna de nombre/código
+        for col in ['Values_code', 'Values_Code', 'Name']:
+            if col in df_vol.columns:
+                col_name_vol = col
+                break
+        
+        if not col_value_vol or not col_value_cap or not col_name_vol:
+            print(f"❌ Columnas no encontradas. df_vol: {df_vol.columns.tolist()}")
+            return None
+        
+        print(f"🔍 Columnas detectadas - vol_value: {col_value_vol}, cap_value: {col_value_cap}, name: {col_name_vol}")
+        
+        # Crear diccionario de región por embalse
+        embalse_region = {}
+        col_name_listado = None
+        for col in ['Values_Code', 'Values_code', 'Name']:
+            if col in df_listado.columns:
+                col_name_listado = col
+                break
+        
+        if col_name_listado and 'Values_HydroRegion' in df_listado.columns:
+            for _, row in df_listado.iterrows():
+                codigo = row[col_name_listado]
+                region = row['Values_HydroRegion']
+                embalse_region[codigo] = region
+        else:
+            print(f"❌ Columnas del listado: {df_listado.columns.tolist()}")
+            return None
+        
+        # Hacer copias antes de renombrar para evitar modificar los originales
+        df_vol_copy = df_vol.copy()
+        df_cap_copy = df_cap.copy()
+        
+        # Renombrar columnas en las copias
+        df_vol_copy = df_vol_copy.rename(columns={col_value_vol: 'volumen_wh', col_name_vol: 'codigo'})
+        df_cap_copy = df_cap_copy.rename(columns={col_value_cap: 'capacidad_wh'})
+        
+        # Buscar columna de nombre/código en df_cap
+        col_name_cap = None
+        for col in ['Values_code', 'Values_Code', 'Name']:
+            if col in df_cap.columns:
+                col_name_cap = col
+                break
+        
+        df_cap_copy = df_cap_copy.rename(columns={col_name_cap: 'codigo'})
+        
+        print(f"🔍 Columnas df_vol_copy: {df_vol_copy.columns.tolist()}")
+        print(f"🔍 Columnas df_cap_copy: {df_cap_copy.columns.tolist()}")
+        
+        # Verificar que las columnas existen
+        if 'volumen_wh' not in df_vol_copy.columns or 'codigo' not in df_vol_copy.columns:
+            print(f"❌ Error: columnas faltantes en df_vol_copy")
+            return None
+        
+        if 'capacidad_wh' not in df_cap_copy.columns or 'codigo' not in df_cap_copy.columns:
+            print(f"❌ Error: columnas faltantes en df_cap_copy")
+            return None
+        
+        df_merged = pd.merge(
+            df_vol_copy[['codigo', 'volumen_wh']],
+            df_cap_copy[['codigo', 'capacidad_wh']],
+            on='codigo',
+            how='inner'
+        )
+        
+        # Calcular porcentajes
+        df_merged['volumen_pct'] = (df_merged['volumen_wh'] / df_merged['capacidad_wh']) * 100
+        capacidad_total = df_merged['capacidad_wh'].sum()
+        df_merged['participacion'] = (df_merged['capacidad_wh'] / capacidad_total) * 100
+        
+        # Agregar región
+        df_merged['region'] = df_merged['codigo'].map(embalse_region)
+        
+        # Agrupar por región
+        regiones_data = {}
+        for region in df_merged['region'].unique():
+            if pd.isna(region) or region not in REGIONES_COORDENADAS:
+                continue
+            
+            df_region = df_merged[df_merged['region'] == region]
+            
+            # Crear lista de embalses de la región
+            embalses_lista = []
+            riesgo_max = 'BAJO'
+            orden_riesgo = {'ALTO': 3, 'MEDIO': 2, 'BAJO': 1}
+            
+            for _, row in df_region.iterrows():
+                riesgo, color, icono = calcular_semaforo_embalse(row['participacion'], row['volumen_pct'])
+                
+                embalses_lista.append({
+                    'codigo': row['codigo'],
+                    'volumen_pct': row['volumen_pct'],
+                    'volumen_gwh': row['volumen_wh'] / 1e9,
+                    'capacidad_gwh': row['capacidad_wh'] / 1e9,
+                    'participacion': row['participacion'],
+                    'riesgo': riesgo,
+                    'color': color,
+                    'icono': icono
+                })
+                
+                # Actualizar riesgo máximo de la región
+                if orden_riesgo[riesgo] > orden_riesgo[riesgo_max]:
+                    riesgo_max = riesgo
+            
+            # Determinar color de la región según el riesgo máximo
+            color_region = {'ALTO': '#dc3545', 'MEDIO': '#ffc107', 'BAJO': '#28a745'}[riesgo_max]
+            
+            coords = REGIONES_COORDENADAS[region]
+            
+            regiones_data[region] = {
+                'embalses': embalses_lista,
+                'riesgo_max': riesgo_max,
+                'color': color_region,
+                'lat': coords['lat'],
+                'lon': coords['lon'],
+                'nombre': coords['nombre'],
+                'total_embalses': len(embalses_lista)
+            }
+        
+        return regiones_data
+    
+    except Exception as e:
+        print(f"❌ Error obteniendo datos para mapa por región: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+def crear_mapa_embalses_por_region():
+    """
+    Crea el mapa interactivo de Colombia con puntos por región hidrológica
+    """
+    import plotly.graph_objects as go
+    
+    regiones_data = obtener_datos_embalses_por_region()
+    
+    if regiones_data is None or len(regiones_data) == 0:
+        return dbc.Alert([
+            html.H5("⚠️ No hay datos disponibles", className="alert-heading"),
+            html.P("No se pudieron cargar los datos de los embalses. Intente nuevamente más tarde.")
+        ], color="warning")
+    
+    # Crear figura del mapa
+    fig = go.Figure()
+    
+    # Agregar puntos por región
+    for region, data in regiones_data.items():
+        # Crear texto del tooltip con lista de embalses
+        embalses_texto = "<br>".join([
+            f"• {emb['codigo']}: {emb['volumen_pct']:.1f}% {emb['icono']}"
+            for emb in sorted(data['embalses'], key=lambda x: x['volumen_pct'])[:10]  # Mostrar máximo 10
+        ])
+        
+        if data['total_embalses'] > 10:
+            embalses_texto += f"<br>... y {data['total_embalses'] - 10} más"
+        
+        hover_text = (
+            f"<b>{data['nombre']}</b><br>" +
+            f"Total embalses: {data['total_embalses']}<br>" +
+            f"Riesgo máximo: <b>{data['riesgo_max']}</b><br><br>" +
+            f"<b>Embalses:</b><br>{embalses_texto}"
+        )
+        
+        # Tamaño según cantidad de embalses
+        tamaño = min(15 + data['total_embalses'] * 3, 40)
+        
+        fig.add_trace(go.Scattergeo(
+            lon=[data['lon']],
+            lat=[data['lat']],
+            text=[data['nombre']],
+            mode='markers+text',
+            marker=dict(
+                size=tamaño,
+                color=data['color'],
+                line=dict(width=3, color='white'),
+                symbol='circle'
+            ),
+            textposition='top center',
+            textfont=dict(size=10, color='#2c3e50', family='Arial Black'),
+            name=f"{data['nombre']} ({data['riesgo_max']})",
+            hovertext=hover_text,
+            hoverinfo='text',
+            showlegend=True
+        ))
+    
+    # Configurar el mapa centrado en Colombia
+    fig.update_geos(
+        center=dict(lon=-74, lat=4.5),
+        projection_type='mercator',
+        showcountries=True,
+        countrycolor='lightgray',
+        showcoastlines=True,
+        coastlinecolor='gray',
+        showland=True,
+        landcolor='#f5f5f5',
+        showlakes=True,
+        lakecolor='lightblue',
+        showrivers=True,
+        rivercolor='lightblue',
+        lonaxis_range=[-79, -66],
+        lataxis_range=[-4.5, 13],
+        bgcolor='#e8f4f8'
+    )
+    
+    fig.update_layout(
+        title={
+            'text': '🗺️ Mapa de Embalses por Región Hidrológica',
+            'x': 0.5,
+            'xanchor': 'center',
+            'font': {'size': 18, 'color': COLORS['text_primary'], 'family': 'Arial Black'}
+        },
+        height=600,
+        margin=dict(l=0, r=0, t=60, b=0),
+        legend=dict(
+            title=dict(text='Regiones', font=dict(size=12, family='Arial Black')),
+            orientation='v',
+            yanchor='top',
+            y=0.98,
+            xanchor='left',
+            x=0.01,
+            bgcolor='rgba(255,255,255,0.9)',
+            bordercolor='gray',
+            borderwidth=1,
+            font=dict(size=10)
+        ),
+        hoverlabel=dict(
+            bgcolor='white',
+            font_size=11,
+            font_family='Arial'
+        )
+    )
+    
+    return dcc.Graph(figure=fig, config={'displayModeBar': True, 'displaylogo': False})
+
+def crear_tabla_embalses_por_region():
+    """
+    Crea la tabla detallada de embalses agrupada por región
+    """
+    regiones_data = obtener_datos_embalses_por_region()
+    
+    if regiones_data is None or len(regiones_data) == 0:
+        return dbc.Alert("No hay datos disponibles", color="warning")
+    
+    # Ordenar regiones por riesgo máximo
+    orden_riesgo = {'ALTO': 0, 'MEDIO': 1, 'BAJO': 2}
+    regiones_ordenadas = sorted(
+        regiones_data.items(),
+        key=lambda x: (orden_riesgo[x[1]['riesgo_max']], x[0])
+    )
+    
+    # Crear acordeón con una sección por región
+    acordeon_items = []
+    
+    for region, data in regiones_ordenadas:
+        # Ordenar embalses por volumen (menor a mayor)
+        embalses_ordenados = sorted(data['embalses'], key=lambda x: x['volumen_pct'])
+        
+        # Crear filas de tabla para esta región
+        filas_region = []
+        for emb in embalses_ordenados:
+            filas_region.append(
+                html.Tr([
+                    html.Td(html.Span(emb['icono'], style={'fontSize': '1.2rem'}), className="text-center"),
+                    html.Td(emb['codigo'], style={'fontWeight': '600'}),
+                    html.Td(f"{emb['volumen_pct']:.1f}%", 
+                           style={'color': emb['color'], 'fontWeight': '700'}),
+                    html.Td(f"{emb['volumen_gwh']:.0f} GWh"),
+                    html.Td(f"{emb['capacidad_gwh']:.0f} GWh"),
+                    html.Td(f"{emb['participacion']:.1f}%"),
+                    html.Td(emb['riesgo'], 
+                           style={
+                               'color': emb['color'],
+                               'fontWeight': 'bold',
+                               'backgroundColor': emb['color'] + '20',
+                               'padding': '5px 10px',
+                               'borderRadius': '4px'
+                           })
+                ])
+            )
+        
+        tabla_region = dbc.Table([
+            html.Thead([
+                html.Tr([
+                    html.Th("", className="text-center", style={'width': '50px'}),
+                    html.Th("Embalse"),
+                    html.Th("Volumen %"),
+                    html.Th("Volumen"),
+                    html.Th("Capacidad"),
+                    html.Th("Participación %"),
+                    html.Th("Riesgo")
+                ], style={'backgroundColor': data['color'], 'color': 'white', 'fontSize': '0.9rem'})
+            ]),
+            html.Tbody(filas_region)
+        ], bordered=True, hover=True, responsive=True, striped=True, size='sm')
+        
+        # Título del acordeón con color según riesgo
+        titulo_acordeon = html.Div([
+            html.Span(f"📍 {data['nombre']}", style={'fontWeight': '600', 'fontSize': '1.1rem'}),
+            html.Span(
+                f" ({data['total_embalses']} embalses - Riesgo {data['riesgo_max']})",
+                style={'color': data['color'], 'fontWeight': 'bold', 'marginLeft': '10px'}
+            )
+        ])
+        
+        acordeon_items.append(
+            dbc.AccordionItem(
+                tabla_region,
+                title=titulo_acordeon,
+                item_id=f"region-{region}"
+            )
+        )
+    
+    return dbc.Accordion(acordeon_items, start_collapsed=True, always_open=True)
+
+# ============================================================================
+
+
 def crear_fichas_sin_seguras(region=None, rio=None):
     """
     Versión segura de crear_fichas_sin para uso en layout inicial
     con soporte para filtros por región y río.
     """
-    objetoAPI = get_objetoAPI()
     try:
         print("🔍 [DEBUG] crear_fichas_sin_seguras ejecutándose...")
-        
-        # TEMPORAL: Datos de prueba mientras debuggeamos
-        if not objetoAPI:
-            print("⚠️ API no disponible - usando datos de prueba")
-            return crear_fichas_temporales()
-            
         return crear_fichas_sin(region=region, rio=rio)
     except Exception as e:
 # REMOVED DEBUG:         print(f"❌ [ERROR] Error en crear_fichas_sin_seguras: {e}")
@@ -973,7 +1320,6 @@ def render_hidro_tab_content(active_tab):
         fecha_inicio_str = fecha_inicio.strftime('%Y-%m-%d')
         fecha_final_str = fecha_final.strftime('%Y-%m-%d')
         # Importante: show_default_view requiere start_date y end_date
-        from dash import dcc, html, Input, Output, State, callback, register_page
         try:
             # Usar la función auxiliar definida en update_content
             # Debemos replicar la lógica aquí para obtener el contenido por defecto
@@ -1024,7 +1370,7 @@ def render_hidro_tab_content(active_tab):
                 id="loading-hidro",
                 type="circle",
                 children=html.Div([
-                    html.Div(id="fichas-kpi-container", children=crear_fichas_sin_seguras()),
+                    # Fichas eliminadas - ahora están en la página de Generación
                     html.Div(id="hidro-results-content-dynamic", className="mt-4", children=resultados_embalse)
                 ], id="hidro-results-content", className="mt-4"),
                 color=COLORS['primary'],
@@ -1112,23 +1458,10 @@ def update_rio_options(region):
     return options
 
 
-# Nuevo callback para actualizar las fichas KPI cuando cambian los filtros, incluyendo la fecha final como Input
-@callback(
-    Output("fichas-kpi-container", "children"),
-    [Input("region-dropdown", "value"),
-     Input("rio-dropdown", "value"),
-     Input("end-date", "date")]
-)
-def update_fichas_kpi(region, rio, end_date):
-    """
-    Actualiza las fichas KPI según los filtros seleccionados, usando la fecha final del filtro
-    """
-    print(f"🔄 [DEBUG] Actualizando fichas KPI: región={region}, río={rio}, fecha_final={end_date}")
-    # Usar la fecha FINAL seleccionada o fecha de ayer como fallback
-    fecha_final = end_date if end_date else (date.today() - timedelta(days=1)).strftime('%Y-%m-%d')
-    region_filtro = None if region == "__ALL_REGIONS__" else region
-    rio_filtro = None if rio == "__ALL__" else rio
-    return crear_fichas_sin(fecha=fecha_final, region=region_filtro, rio=rio_filtro)
+# ===== CALLBACK ELIMINADO - Las fichas KPI ahora están en la página de Generación =====
+# El callback update_fichas_kpi ha sido removido ya que las fichas de 
+# Reservas Hídricas y Aportes Hídricos ahora se muestran en pages/generacion.py
+# ===================================================================================
 
 
 # Callback principal para consultar y mostrar datos filtrando por río y fechas
@@ -1147,6 +1480,278 @@ def update_content(n_clicks, rio, start_date, end_date, region):
 
     # Normalizar el valor de la región para evitar problemas de formato/case
     region_normalized = region.strip().title() if region and region != "__ALL_REGIONS__" else region
+    
+    # Función para crear mapa de embalses usando datos ya calculados
+    def crear_mapa_embalses_directo(regiones_totales, df_completo_embalses):
+        """Crea el mapa mostrando CADA EMBALSE como un círculo/bolita individual de color sobre mapa real de Colombia."""
+        try:
+            import plotly.graph_objects as go
+            import random
+            from math import sin, cos, radians
+            import requests
+            
+            if regiones_totales is None or regiones_totales.empty:
+                return dbc.Alert("No hay datos de regiones disponibles", color="warning")
+            
+            if df_completo_embalses is None or df_completo_embalses.empty:
+                return dbc.Alert("No hay datos de embalses disponibles", color="warning")
+            
+            print(f"🗺️ Creando mapa con bolitas individuales por embalse sobre mapa real de Colombia...")
+            print(f"🔍 Total embalses en df_completo_embalses: {len(df_completo_embalses)}")
+            
+            # Crear figura con mapa base de Colombia
+            fig = go.Figure()
+            
+            # PRIMERO: Intentar cargar GeoJSON de Colombia desde fuente pública
+            # Y colorear regiones según los embalses que contienen
+            try:
+                # Usar GeoJSON simplificado de Colombia de datos abiertos
+                print("🌍 Descargando mapa geográfico de Colombia...")
+                url_geojson = "https://gist.githubusercontent.com/john-guerra/43c7656821069d00dcbc/raw/be6a6e239cd5b5b803c6e7c2ec405b793a9064dd/Colombia.geo.json"
+                response = requests.get(url_geojson, timeout=10)
+                colombia_geojson = response.json()
+                
+                # Mapeo de departamentos a regiones hidroeléctricas con colores
+                DEPARTAMENTOS_A_REGIONES = {
+                    # ANTIOQUIA - Verde oscuro
+                    'ANTIOQUIA': {'region': 'ANTIOQUIA', 'color': 'rgba(76, 175, 80, 0.5)', 'border': '#4CAF50'},
+                    
+                    # CALDAS - Morado
+                    'CALDAS': {'region': 'CALDAS', 'color': 'rgba(156, 39, 176, 0.5)', 'border': '#9C27B0'},
+                    
+                    # CARIBE - Naranja claro
+                    'CESAR': {'region': 'CARIBE', 'color': 'rgba(255, 152, 0, 0.5)', 'border': '#FF9800'},
+                    'CÓRDOBA': {'region': 'CARIBE', 'color': 'rgba(255, 152, 0, 0.5)', 'border': '#FF9800'},
+                    
+                    # CENTRO - Amarillo
+                    'CUNDINAMARCA': {'region': 'CENTRO', 'color': 'rgba(255, 235, 59, 0.5)', 'border': '#FFEB3B'},
+                    'BOYACÁ': {'region': 'CENTRO', 'color': 'rgba(255, 235, 59, 0.5)', 'border': '#FFEB3B'},
+                    'SANTANDER': {'region': 'CENTRO', 'color': 'rgba(255, 235, 59, 0.5)', 'border': '#FFEB3B'},
+                    
+                    # ORIENTE - Rosado/Magenta
+                    'META': {'region': 'ORIENTE', 'color': 'rgba(233, 30, 99, 0.5)', 'border': '#E91E63'},
+                    'CASANARE': {'region': 'ORIENTE', 'color': 'rgba(233, 30, 99, 0.5)', 'border': '#E91E63'},
+                    
+                    # VALLE - Violeta/Púrpura
+                    'VALLE DEL CAUCA': {'region': 'VALLE', 'color': 'rgba(103, 58, 183, 0.5)', 'border': '#673AB7'},
+                    'CAUCA': {'region': 'VALLE', 'color': 'rgba(103, 58, 183, 0.5)', 'border': '#673AB7'},
+                    
+                    # SINÚ - Azul claro
+                    'CÓRDOBA': {'region': 'SINÚ', 'color': 'rgba(33, 150, 243, 0.5)', 'border': '#2196F3'},
+                }
+                
+                # Agregar el mapa de Colombia como fondo con colores por región
+                for feature in colombia_geojson['features']:
+                    if feature['geometry']['type'] == 'Polygon':
+                        coords = feature['geometry']['coordinates'][0]
+                    elif feature['geometry']['type'] == 'MultiPolygon':
+                        coords = feature['geometry']['coordinates'][0][0]
+                    else:
+                        continue
+                    
+                    lons = [c[0] for c in coords]
+                    lats = [c[1] for c in coords]
+                    
+                    # Obtener nombre del departamento
+                    nombre_dpto = feature['properties'].get('NOMBRE_DPT', '').upper()
+                    
+                    # Determinar color según región hidroeléctrica
+                    if nombre_dpto in DEPARTAMENTOS_A_REGIONES:
+                        info_region = DEPARTAMENTOS_A_REGIONES[nombre_dpto]
+                        fillcolor = info_region['color']
+                        bordercolor = info_region['border']
+                        region_nombre = info_region['region']
+                        hovertext = f"<b>{feature['properties'].get('NOMBRE_DPT', 'Departamento')}</b><br>Región: {region_nombre}"
+                    else:
+                        # Departamentos sin región hidroeléctrica asignada
+                        fillcolor = 'rgba(220, 220, 220, 0.2)'
+                        bordercolor = '#999999'
+                        hovertext = f"<b>{feature['properties'].get('NOMBRE_DPT', 'Departamento')}</b>"
+                    
+                    # Dibujar contorno del departamento con color de región
+                    fig.add_trace(go.Scattergeo(
+                        lon=lons,
+                        lat=lats,
+                        mode='lines',
+                        line=dict(width=1.5, color=bordercolor),
+                        fill='toself',
+                        fillcolor=fillcolor,
+                        hoverinfo='text',
+                        hovertext=hovertext,
+                        showlegend=False
+                    ))
+                
+                print("✅ Mapa geográfico de Colombia cargado con colores por región")
+            except Exception as e:
+                print(f"⚠️ No se pudo cargar mapa de Colombia: {e}")
+                print("   Continuando sin mapa base...")
+            
+            # SEGUNDO: Procesar CADA embalse directamente de df_completo_embalses
+            leyenda_mostrada = {'ALTO': False, 'MEDIO': False, 'BAJO': False}
+            embalses_mapeados = 0
+            embalses_por_region = {}
+            
+            # df_completo_embalses ya tiene: 'Embalse', 'Región', 'Participación (%)', 'Volumen Útil (%)'
+            for idx, row in df_completo_embalses.iterrows():
+                # Extraer datos del embalse
+                nombre_embalse = str(row.get('Embalse', '')).strip()
+                region_embalse = str(row.get('Región', '')).strip()
+                
+                if not nombre_embalse or not region_embalse:
+                    continue
+                
+                # Normalizar nombre de región a mayúsculas para matching
+                region_normalizada = region_embalse.upper()
+                
+                # Verificar que la región existe en nuestras coordenadas
+                if region_normalizada not in REGIONES_COORDENADAS:
+                    print(f"⚠️ Región '{region_embalse}' no está en REGIONES_COORDENADAS")
+                    continue
+                
+                # Contar embalses por región
+                if region_normalizada not in embalses_por_region:
+                    embalses_por_region[region_normalizada] = 0
+                embalses_por_region[region_normalizada] += 1
+                
+                # Obtener participación y volumen desde el DataFrame
+                participacion = float(row.get('Participación (%)', 0))
+                volumen_pct = float(row.get('Volumen Útil (%)', 0))
+                
+                # Calcular riesgo usando la misma función que las tablas
+                riesgo, color, icono = calcular_semaforo_embalse(participacion, volumen_pct)
+                
+                # Obtener coordenadas del centro de la región
+                coords_region = REGIONES_COORDENADAS[region_normalizada]
+                lat_centro = coords_region['lat']
+                lon_centro = coords_region['lon']
+                
+                # Calcular posición del embalse (distribución aleatoria pero consistente)
+                seed_value = hash(nombre_embalse + region_normalizada) % 100000
+                random.seed(seed_value)
+                
+                # Radio de distribución
+                radio_lat = 0.5
+                radio_lon = 0.6
+                
+                angulo = random.uniform(0, 360)
+                distancia = random.uniform(0.4, 1.0)
+                
+                offset_lat = distancia * radio_lat * sin(radians(angulo))
+                offset_lon = distancia * radio_lon * cos(radians(angulo))
+                
+                lat_embalse = lat_centro + offset_lat
+                lon_embalse = lon_centro + offset_lon
+                
+                # Crear texto del hover
+                hover_text = (
+                    f"<b>{nombre_embalse}</b><br>" +
+                    f"Región: {coords_region['nombre']}<br>" +
+                    f"Participación: {participacion:.2f}%<br>" +
+                    f"Volumen Útil: {volumen_pct:.1f}%<br>" +
+                    f"<b>Riesgo: {riesgo}</b> {icono}"
+                )
+                
+                # Tamaño del círculo proporcional a participación
+                tamaño = max(12, min(10 + participacion * 0.8, 35))
+                
+                # Controlar leyenda (mostrar solo una vez por cada nivel de riesgo)
+                mostrar_leyenda = not leyenda_mostrada[riesgo]
+                if mostrar_leyenda:
+                    leyenda_mostrada[riesgo] = True
+                    nombre_leyenda = f"{icono} Riesgo {riesgo}"
+                else:
+                    nombre_leyenda = nombre_embalse
+                
+                # Agregar el punto/círculo al mapa
+                fig.add_trace(go.Scattergeo(
+                    lon=[lon_embalse],
+                    lat=[lat_embalse],
+                    mode='markers',
+                    marker=dict(
+                        size=tamaño,
+                        color=color,
+                        line=dict(width=2, color='white'),
+                        symbol='circle',
+                        opacity=0.9
+                    ),
+                    name=nombre_leyenda,
+                    hovertext=hover_text,
+                    hoverinfo='text',
+                    showlegend=mostrar_leyenda,
+                    legendgroup=riesgo
+                ))
+                
+                embalses_mapeados += 1
+                print(f"  ✓ {nombre_embalse} ({region_embalse}): {riesgo} - Vol: {volumen_pct:.1f}%, Part: {participacion:.1f}%")
+            
+            if embalses_mapeados == 0:
+                print("❌ No se pudieron mapear embalses")
+                return dbc.Alert("No se pudieron mapear los embalses", color="warning")
+            
+            # Configurar el mapa enfocado solo en Colombia
+            fig.update_geos(
+                projection_type='mercator',
+                scope='south america',
+                center=dict(lon=-73.5, lat=4.5),
+                showcoastlines=True,
+                coastlinecolor='#333333',
+                coastlinewidth=2,
+                showland=True,
+                landcolor='#f5f5f5',
+                showcountries=True,
+                countrycolor='#000000',
+                countrywidth=2.5,
+                showlakes=True,
+                lakecolor='#b3d9ff',
+                showrivers=False,
+                lonaxis_range=[-79.5, -66.5],
+                lataxis_range=[-4.5, 13],
+                bgcolor='#ffffff',
+                resolution=50
+            )
+            
+            fig.update_layout(
+                title={
+                    'text': f'🗺️ Mapa de {embalses_mapeados} Embalses - Semáforo de Riesgo Hidrológico',
+                    'x': 0.5,
+                    'xanchor': 'center',
+                    'font': {'size': 16, 'color': COLORS['text_primary'], 'family': 'Arial Black'}
+                },
+                height=700,
+                margin=dict(l=10, r=10, t=60, b=10),
+                paper_bgcolor='white',
+                geo=dict(
+                    projection_scale=5.5
+                ),
+                legend=dict(
+                    title=dict(text='Nivel de Riesgo', font=dict(size=12, family='Arial Black')),
+                    orientation='v',
+                    yanchor='top',
+                    y=0.98,
+                    xanchor='left',
+                    x=0.01,
+                    bgcolor='rgba(255,255,255,0.95)',
+                    bordercolor='#cccccc',
+                    borderwidth=2,
+                    font=dict(size=11)
+                ),
+                hoverlabel=dict(
+                    bgcolor='white',
+                    font_size=12,
+                    font_family='Arial',
+                    bordercolor='#666666'
+                )
+            )
+            
+            print(f"✅ Mapa creado exitosamente: {embalses_mapeados} embalses en {len(embalses_por_region)} regiones")
+            print(f"📍 Distribución por región: {embalses_por_region}")
+            return dcc.Graph(figure=fig, config={'displayModeBar': True, 'displaylogo': False})
+            
+        except Exception as e:
+            print(f"❌ Error creando mapa: {e}")
+            import traceback
+            traceback.print_exc()
+            return dbc.Alert(f"Error al crear el mapa: {str(e)}", color="danger")
     
     # Función auxiliar para mostrar la vista por defecto (panorámica nacional)
     def show_default_view(start_date, end_date):
@@ -1270,6 +1875,23 @@ def update_content(n_clicks, rio, start_date, end_date, region):
                             ], color="info", className="mb-3")
                         ], md=12)
                     ]),
+                    
+                    # ========== MAPA DE EMBALSES POR REGIÓN ==========
+                    dbc.Row([
+                        dbc.Col([
+                            html.H5([
+                                html.I(className="fas fa-map-marked-alt me-2", style={'color': COLORS['primary']}),
+                                "Mapa de Embalses por Región Hidrológica"
+                            ], className="mb-3"),
+                            dcc.Loading(
+                                id="loading-mapa-embalses",
+                                type="circle",
+                                children=crear_mapa_embalses_directo(regiones_totales, df_completo_embalses)
+                            )
+                        ], width=12)
+                    ], className="mb-4"),
+                    # ================================================
+                    
                     dbc.Row([
                         dbc.Col([
                             dbc.Card([
@@ -4478,3 +5100,202 @@ def load_region_options(_):
     except Exception as e:
         print(f"Error cargando opciones de regiones: {e}")
         return [{"label": "🌍 Todas las regiones", "value": "__ALL_REGIONS__"}]
+
+# Callback para cargar el mapa de embalses por región
+@callback(
+    Output('mapa-embalses-container', 'children'),
+    Input('participacion-jerarquica-data', 'data')  # Se ejecuta cuando se cargan los datos de las tablas
+)
+def cargar_mapa_embalses(data):
+    """Genera el mapa mostrando CADA EMBALSE como un punto individual dentro de su región."""
+    try:
+        print(f"🗺️ Generando mapa con puntos por embalse...")
+        
+        if not data or len(data) == 0:
+            return dbc.Alert([
+                html.H5("⚠️ No hay datos disponibles", className="alert-heading"),
+                html.P("Esperando datos de embalses...")
+            ], color="info")
+        
+        # Filtrar solo embalses (no regiones ni total)
+        embalses_data = [d for d in data if d.get('tipo') == 'embalse']
+        
+        if len(embalses_data) == 0:
+            return dbc.Alert([
+                html.H5("⚠️ No hay datos de embalses", className="alert-heading"),
+                html.P("No se encontraron datos de embalses en las tablas.")
+            ], color="warning")
+        
+        print(f"🗺️ Procesando {len(embalses_data)} embalses individuales...")
+        
+        # Agrupar embalses por región
+        import random
+        from math import cos, radians
+        
+        regiones_embalses = {}
+        for emb in embalses_data:
+            region = emb.get('region_name')
+            if not region or region not in REGIONES_COORDENADAS:
+                continue
+            
+            if region not in regiones_embalses:
+                regiones_embalses[region] = []
+            
+            # Obtener valores
+            participacion = emb.get('participacion_valor', 0)
+            volumen_pct = emb.get('volumen_valor', 0)
+            nombre_embalse = emb.get('nombre', '').replace('    └─ ', '')
+            
+            # Calcular riesgo con LA MISMA función del semáforo
+            riesgo, color, icono = calcular_semaforo_embalse(participacion, volumen_pct)
+            
+            regiones_embalses[region].append({
+                'nombre': nombre_embalse,
+                'participacion': participacion,
+                'volumen_pct': volumen_pct,
+                'riesgo': riesgo,
+                'color': color,
+                'icono': icono
+            })
+        
+        # Crear el mapa con Plotly
+        import plotly.graph_objects as go
+        
+        fig = go.Figure()
+        
+        # Contador para leyenda (solo mostrar una vez cada color)
+        leyenda_mostrada = {'ALTO': False, 'MEDIO': False, 'BAJO': False}
+        
+        # Para cada región, distribuir los embalses en un área alrededor del centro de la región
+        for region, embalses in regiones_embalses.items():
+            coords = REGIONES_COORDENADAS[region]
+            lat_centro = coords['lat']
+            lon_centro = coords['lon']
+            
+            # Calcular un radio de dispersión proporcional al número de embalses
+            # Más embalses = mayor área de dispersión
+            num_embalses = len(embalses)
+            radio_lat = 0.3 + (num_embalses * 0.05)  # Radio en grados de latitud
+            radio_lon = 0.4 + (num_embalses * 0.06)  # Radio en grados de longitud
+            
+            print(f"📍 {region}: {num_embalses} embalses")
+            
+            # Distribuir cada embalse en posiciones aleatorias dentro del área de la región
+            for i, emb in enumerate(embalses):
+                # Generar posición aleatoria dentro de un círculo alrededor del centro
+                # Usar semilla basada en el nombre para que sea consistente entre recargas
+                seed_value = hash(emb['nombre']) % 10000
+                random.seed(seed_value)
+                
+                # Ángulo aleatorio y distancia aleatoria desde el centro
+                angulo = random.uniform(0, 360)
+                distancia = random.uniform(0.2, 1.0)  # 20% a 100% del radio
+                
+                # Calcular offset
+                from math import sin, cos, radians
+                offset_lat = distancia * radio_lat * sin(radians(angulo))
+                offset_lon = distancia * radio_lon * cos(radians(angulo))
+                
+                lat_embalse = lat_centro + offset_lat
+                lon_embalse = lon_centro + offset_lon
+                
+                # Crear tooltip con información del embalse
+                hover_text = (
+                    f"<b>{emb['nombre']}</b><br>" +
+                    f"Región: {coords['nombre']}<br>" +
+                    f"Participación: {emb['participacion']:.2f}%<br>" +
+                    f"Volumen Útil: {emb['volumen_pct']:.1f}%<br>" +
+                    f"<b>Riesgo: {emb['riesgo']}</b> {emb['icono']}"
+                )
+                
+                # Tamaño según participación (más grande = más importante)
+                tamaño = min(8 + emb['participacion'] * 0.5, 25)
+                
+                # Mostrar en leyenda solo la primera vez que aparece cada nivel de riesgo
+                mostrar_leyenda = not leyenda_mostrada[emb['riesgo']]
+                if mostrar_leyenda:
+                    leyenda_mostrada[emb['riesgo']] = True
+                    nombre_leyenda = f"{emb['icono']} Riesgo {emb['riesgo']}"
+                else:
+                    nombre_leyenda = f"{emb['nombre']}"
+                
+                # Agregar punto al mapa
+                fig.add_trace(go.Scattergeo(
+                    lon=[lon_embalse],
+                    lat=[lat_embalse],
+                    mode='markers',
+                    marker=dict(
+                        size=tamaño,
+                        color=emb['color'],
+                        line=dict(width=1, color='white'),
+                        symbol='circle',
+                        opacity=0.85
+                    ),
+                    name=nombre_leyenda,
+                    hovertext=hover_text,
+                    hoverinfo='text',
+                    showlegend=mostrar_leyenda,
+                    legendgroup=emb['riesgo']  # Agrupar por nivel de riesgo
+                ))
+        
+        # Configurar el mapa centrado en Colombia
+        fig.update_geos(
+            center=dict(lon=-74, lat=4.5),
+            projection_type='mercator',
+            showcountries=True,
+            countrycolor='lightgray',
+            showcoastlines=True,
+            coastlinecolor='gray',
+            showland=True,
+            landcolor='#f5f5f5',
+            showlakes=True,
+            lakecolor='lightblue',
+            showrivers=True,
+            rivercolor='lightblue',
+            lonaxis_range=[-79, -66],
+            lataxis_range=[-4.5, 13],
+            bgcolor='#e8f4f8'
+        )
+        
+        fig.update_layout(
+            title={
+                'text': f'🗺️ Mapa de {len(embalses_data)} Embalses - Semáforo de Riesgo Hidrológico',
+                'x': 0.5,
+                'xanchor': 'center',
+                'font': {'size': 16, 'color': COLORS['text_primary'], 'family': 'Arial Black'}
+            },
+            height=600,
+            margin=dict(l=0, r=0, t=60, b=0),
+            legend=dict(
+                title=dict(text='Nivel de Riesgo', font=dict(size=12, family='Arial Black')),
+                orientation='v',
+                yanchor='top',
+                y=0.98,
+                xanchor='left',
+                x=0.01,
+                bgcolor='rgba(255,255,255,0.9)',
+                bordercolor='gray',
+                borderwidth=1,
+                font=dict(size=11)
+            ),
+            hoverlabel=dict(
+                bgcolor='white',
+                font_size=12,
+                font_family='Arial'
+            )
+        )
+        
+        total_embalses = len(embalses_data)
+        total_regiones = len(regiones_embalses)
+        print(f"✅ Mapa generado: {total_embalses} embalses en {total_regiones} regiones")
+        
+        return dcc.Graph(figure=fig, config={'displayModeBar': True, 'displaylogo': False})
+        
+    except Exception as e:
+        print(f"❌ Error generando mapa de embalses: {e}")
+        import traceback
+        traceback.print_exc()
+        return html.Div([
+            html.I(className="fas fa-exclamation-triangle me-2"),
+            f"Error al generar el mapa: {str(e)}"
+        ], className="alert alert-danger")

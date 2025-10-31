@@ -7,10 +7,10 @@ if sys.platform == 'win32':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-from dash import Dash, html, dcc, page_container
+from dash import Dash, html, dcc
 import dash_bootstrap_components as dbc
 
-# Crear la aplicación Dash
+# Crear la aplicación Dash con soporte multi-página
 app = Dash(
     __name__,
     use_pages=True,
@@ -25,30 +25,35 @@ app = Dash(
     suppress_callback_exceptions=True
 )
 
-# Importar las páginas DESPUÉS de crear la aplicación
-# NOTA: Dash hace auto-discovery de páginas en la carpeta /pages
-# No es necesario importar manualmente, pero lo dejamos para verificación
-try:
-    # from pages import index, metricas, demanda  # Comentado: puede causar error si faltan archivos
-    from pages import metricas, demanda
-    from pages import generacion_solar, generacion_eolica, generacion_biomasa, generacion_hidraulica
-    from pages import generacion_hidraulica_hidrologia, generacion, generacion_termica
-    from pages import transmision, transmision_lineas, transmision_subestaciones, transmision_congestion
-    from pages import distribucion, distribucion_calidad, distribucion_red, distribucion_transformadores
-    from pages import perdidas, perdidas_tecnicas, perdidas_comerciales, perdidas_indicadores
-    from pages import restricciones, restricciones_operativas, restricciones_ambientales, restricciones_regulatorias
-    from pages import demanda_historica, demanda_patrones, demanda_pronosticos
-    print("✅ Todas las páginas importadas correctamente")
-except Exception as e:
-    print(f"⚠️ Error importando algunas páginas: {e}")
-    print("📝 Nota: Dash usará auto-discovery para cargar las páginas")
-    # No imprimimos el traceback completo para no alarmar
+# El servidor para Gunicorn
+server = app.server
 
-# Layout principal de la aplicación usando page_container
+# AHORA importar y registrar las páginas manualmente
+import pages.index_simple_working
+import pages.generacion_fuentes_unificado
+
+# Importar page_container DESPUÉS de registrar páginas
+from dash import page_container
+
+# Layout principal con page_container
 app.layout = html.Div([
     dcc.Location(id="url", refresh=False),
     page_container
 ])
+
+if __name__ == "__main__":
+    import os
+    port = int(os.environ.get('PORT', 8050))
+    print(f"🚀 Iniciando servidor Dash en puerto {port}...")
+    print("📍 La aplicación estará disponible en:")
+    print(f"   - http://localhost:{port}")
+    print(f"   - http://127.0.0.1:{port}")
+    try:
+        app.run(debug=False, host='0.0.0.0', port=port)
+    except Exception as e:
+        print(f"❌ Error al iniciar servidor: {e}")
+        import traceback
+        traceback.print_exc()
 
 if __name__ == "__main__":
     import os

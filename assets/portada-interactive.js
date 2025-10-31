@@ -49,6 +49,61 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     */
     
+    // ===== MANEJO DEL MODAL DE INFORMACIÓN GENERAL (CU) =====
+    // Usar un pequeño delay para asegurar que Dash haya renderizado todo
+    setTimeout(function() {
+        const infoButton = document.getElementById('info-button');
+        const infoModal = document.getElementById('info-modal');
+        const closeInfoButton = document.getElementById('close-info-button');
+        
+        console.log('Buscando elementos del modal:', {
+            infoButton: !!infoButton,
+            infoModal: !!infoModal,
+            closeInfoButton: !!closeInfoButton
+        });
+        
+        if (infoButton && infoModal) {
+            const modalOverlay = infoModal.querySelector('div');
+            
+            infoButton.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (modalOverlay) {
+                    modalOverlay.style.display = 'flex';
+                    console.log('✅ Modal de información CU abierto');
+                } else {
+                    console.error('❌ No se encontró el overlay del modal');
+                }
+            });
+            
+            if (closeInfoButton) {
+                closeInfoButton.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (modalOverlay) {
+                        modalOverlay.style.display = 'none';
+                        console.log('✅ Modal de información CU cerrado');
+                    }
+                });
+            }
+            
+            // Cerrar modal al hacer clic fuera del contenido
+            if (modalOverlay) {
+                modalOverlay.addEventListener('click', function(e) {
+                    if (e.target === this) {
+                        this.style.display = 'none';
+                        console.log('✅ Modal cerrado al hacer clic fuera');
+                    }
+                });
+            }
+            
+            console.log('✅ Event listeners del modal configurados correctamente');
+        } else {
+            console.error('❌ No se encontraron todos los elementos del modal');
+        }
+    }, 1000);  // Delay de 1 segundo para asegurar que Dash haya renderizado
+
+    
     // Agregar partículas flotantes en el fondo
     function createFloatingParticles() {
         const container = document.querySelector('[style*="100vh"]');

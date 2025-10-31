@@ -20,9 +20,11 @@ def chunk_date_ranges(start: date, end: date, chunk_days: int = 30) -> List[Tupl
 def fetch_gene_recurso_chunked(objetoAPI, start: date, end: date, filtros: Iterable[str], batch_size: int = 50, chunk_days: int = 30, retries: int = 2, backoff_sec: float = 0.8) -> pd.DataFrame:
 	"""Consulta Gene con Entity='Recurso' para una lista de filtros (SIC) en lotes y por chunks de fechas.
 	Devuelve DataFrame con columnas: ['Codigo','Fecha','Generacion_GWh'] agregadas por día.
+	ACTUALIZADO: Usa fetch_metric_data con cache histórico en lugar de API directa.
 	"""
+	from utils._xm import fetch_metric_data
 	filtros = [str(x).strip() for x in filtros if x and isinstance(x, (str, int))]
-	if objetoAPI is None or not filtros:
+	if not filtros:
 		return pd.DataFrame(columns=['Codigo','Fecha','Generacion_GWh'])
 
 	registros = []
@@ -30,18 +32,8 @@ def fetch_gene_recurso_chunked(objetoAPI, start: date, end: date, filtros: Itera
 		# Batches por códigos SIC
 		for i in range(0, len(filtros), batch_size):
 			lote = filtros[i:i+batch_size]
-			attempt = 0
-			df = None
-			while attempt <= retries:
-				try:
-					df = objetoAPI.request_data("Gene", "Recurso", ini, fin, lote)
-					break
-				except Exception:
-					if attempt >= retries:
-						df = None
-						break
-					time.sleep(backoff_sec * (2 ** attempt))
-					attempt += 1
+			# Usar la API directamente con códigos específicos
+			df = objetoAPI.request_data("Gene", "Recurso", ini, fin, lote)
 			if df is None or df.empty:
 				continue
 			horas_cols = [c for c in df.columns if str(c).startswith('Values_Hour')]

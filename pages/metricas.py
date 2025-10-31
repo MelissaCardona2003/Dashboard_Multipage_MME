@@ -7,6 +7,8 @@ def get_plotly_modules():
 
 import dash
 from dash import dcc, html, Input, Output, State, callback, register_page
+import dash_table
+import datetime as dt
 import dash_bootstrap_components as dbc
 import pandas as pd
 from datetime import date, timedelta, datetime
@@ -25,8 +27,8 @@ except ImportError:
     print("⚠️ pydataxm no está disponible. Algunos datos pueden no cargarse correctamente.")
 
 # Imports locales para componentes uniformes
-from .components import crear_header, crear_navbar, crear_sidebar_universal, crear_boton_regresar
-from .config import COLORS
+from utils.components import crear_header, crear_navbar, crear_sidebar_universal, crear_boton_regresar
+from utils.config import COLORS
 
 warnings.filterwarnings("ignore")
 
@@ -212,7 +214,7 @@ register_page(
     title="Dashboard Energético XM - Colombia",
     order=2
 )
-from ._xm import get_objetoAPI
+from utils._xm import get_objetoAPI
 
 # Inicializar API XM de forma perezosa y cargar colecciones si están disponibles
 todas_las_metricas = pd.DataFrame()
@@ -1001,28 +1003,28 @@ def display_metric_results(n_clicks, selected_metric, selected_entity, start_dat
 def obtener_datos_reporte():
     """Obtener datos para el reporte"""
     try:
-        # Intentar obtener datos reales de la API
-        objectxm = ReadDB()
-        metricas_list = objectxm.request_data_available()
+        # Intentar obtener datos reales de la API usando get_objetoAPI para colecciones
+        from utils._xm import get_objetoAPI
+        objectxm = get_objetoAPI()
+        if objectxm is not None:
+            metricas_list = objectxm.get_collections()
+        else:
+            metricas_list = []
         
         # Crear DataFrame con información de métricas
         df_metricas = pd.DataFrame({
-            'Métrica': metricas_list[:50],  # Primeras 50 métricas
-            'Tipo': ['Energética'] * min(50, len(metricas_list)),
-            'Estado': ['Disponible'] * min(50, len(metricas_list)),
-            'Última_Actualización': [dt.datetime.now().strftime('%Y-%m-%d')] * min(50, len(metricas_list))
+            'Métrica': metricas_list[:50] if metricas_list else [],  # Primeras 50 métricas
+            'Tipo': ['Energética'] * min(50, len(metricas_list)) if metricas_list else [],
+            'Estado': ['Disponible'] * min(50, len(metricas_list)) if metricas_list else [],
+            'Última_Actualización': [dt.datetime.now().strftime('%Y-%m-%d')] * min(50, len(metricas_list)) if metricas_list else []
         })
         
-        return df_metricas
+        return df_metricas if not df_metricas.empty else None
     except:
-        # Datos de ejemplo si la API no está disponible
-        return pd.DataFrame({
-            'Métrica': ['DemaEner', 'GeneReal', 'PrecBols', 'ReseAmb', 'CapaEfec'],
-            'Descripción': ['Demanda Energía', 'Generación Real', 'Precio Bolsa', 'Reserva Ambiental', 'Capacidad Efectiva'],
-            'Tipo': ['Demanda', 'Generación', 'Precio', 'Reserva', 'Capacidad'],
-            'Estado': ['Disponible'] * 5,
-            'Última_Actualización': [dt.datetime.now().strftime('%Y-%m-%d')] * 5
-        })
+        pass
+    
+    # Si no hay datos reales, retornar None
+    return None
 
 # Callback para descarga Excel
 @callback(

@@ -2,8 +2,8 @@ from dash import dcc, html, Input, Output, State, callback, register_page
 import dash_bootstrap_components as dbc
 
 # Imports locales para componentes uniformes
-from .components import crear_header, crear_sidebar_universal, crear_boton_regresar
-from .config import COLORS
+from utils.components import crear_header, crear_sidebar_universal, crear_boton_regresar
+from utils.config import COLORS
 
 register_page(
     __name__,

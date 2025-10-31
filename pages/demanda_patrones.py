@@ -15,8 +15,8 @@ import os
 import time
 
 # Imports locales para componentes uniformes
-from .components import crear_header, crear_navbar, crear_sidebar_universal
-from .config import COLORS
+from utils.components import crear_header, crear_navbar, crear_sidebar_universal
+from utils.config import COLORS
 
 warnings.filterwarnings("ignore")
 

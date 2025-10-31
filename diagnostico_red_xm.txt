@@ -1,0 +1,90 @@
+DIAGNÓSTICO DE CONECTIVIDAD A API XM
+=====================================
+Fecha: 29 de octubre de 2025
+Servidor: Srvwebprdctrlxm
+
+RESUMEN DEL PROBLEMA:
+- La API XM (servapibi.xm.com.co) NO es alcanzable desde este servidor
+- El problema comenzó alrededor del 22 de octubre de 2025
+- La API SÍ funciona desde otros equipos (confirmado por usuario en portátil)
+
+PRUEBAS REALIZADAS:
+===================
+
+1. RESOLUCIÓN DNS: ✅ FUNCIONA
+   - servapibi.xm.com.co resuelve a: 190.90.250.249, 179.1.5.120
+   - Tiempo de resolución: 0.3 segundos
+
+2. CONECTIVIDAD TCP PUERTO 443: ❌ FALLA
+   - timeout 10 bash -c 'cat < /dev/null > /dev/tcp/190.90.250.249/443'
+   - timeout 10 bash -c 'cat < /dev/null > /dev/tcp/179.1.5.120/443'
+   - Resultado: Ambas IPs NO alcanzables en puerto 443
+
+3. PING: ❌ FALLA
+   - 100% packet loss a 190.90.250.249
+   - 100% packet loss a 179.1.5.120
+
+4. CURL/WGET: ❌ FALLA
+   - Se queda atascado en "Trying IP:443..."
+   - Connection timeout después de ~30 segundos
+
+5. PYTHON/PYDATAXM: ❌ FALLA
+   - Error: ConnectTimeout: Max retries exceeded
+   - Connection to servapibi.xm.com.co timed out
+
+CONECTIVIDAD GENERAL:
+=====================
+
+✅ Google (www.google.com:443) - FUNCIONA
+✅ HTTPS en general - FUNCIONA
+❌ archive.ubuntu.com - NO FUNCIONA (problema similar)
+❌ servapibi.xm.com.co - NO FUNCIONA
+
+CONFIGURACIÓN DE RED:
+=====================
+
+IP del servidor: 172.17.0.46
+Gateway: 172.17.0.2
+Ruta default: default via 172.17.0.2 dev ens160
+
+Firewall local (iptables): ACCEPT (sin restricciones)
+UFW: No instalado/activo
+
+EVENTO SOSPECHOSO:
+==================
+
+22 de octubre 2025, 14:43:47
+- Se detuvo network-online.target
+- Se perdió DHCPv6 lease
+- Se reinició systemd-networkd
+- drop_monitor: Initializing network drop monitor service
+
+CONCLUSIÓN:
+===========
+
+El problema NO es del código de la aplicación.
+El problema ES de infraestructura de red.
+
+POSIBLES CAUSAS:
+1. Firewall corporativo bloqueando IPs colombianas (190.90.x.x, 179.1.x.x)
+2. Cambios en configuración de red el 22 de octubre
+3. Lista blanca/negra de IPs implementada
+4. Problemas de enrutamiento a nivel de gateway/router
+5. Restricciones de seguridad corporativas
+
+ACCIÓN REQUERIDA:
+=================
+
+Contactar al administrador de red/sistemas para:
+1. Verificar logs de firewall para tráfico a 190.90.250.249:443 y 179.1.5.120:443
+2. Revisar cambios de configuración del 22 de octubre
+3. Verificar si hay listas blancas/negras de IPs
+4. Autorizar acceso a servapibi.xm.com.co (IPs: 190.90.250.249, 179.1.5.120)
+
+SOLUCIÓN TEMPORAL:
+==================
+
+Mientras se resuelve el problema de red, la aplicación puede:
+1. Usar datos históricos del cache (ya implementado)
+2. Poblar cache desde equipo con conectividad (portátil) y subirlo al servidor
+3. Configurar proxy si está disponible
