@@ -101,10 +101,11 @@ def obtener_metricas_hidricas():
                 
                 if media_promedio > 0:
                     aporte_pct = round((aportes_promedio / media_promedio) * 100, 2)
+                    # Mostrar la Media Histórica en GWh (igual que XM)
                     # Convertir de Wh a GWh (dividir por 1,000,000)
-                    aporte_gwh = aportes_promedio / 1e6
+                    aporte_gwh = media_promedio / 1e6
                     fecha_aporte = fecha_fin
-                    print(f"✅ Aportes calculados: {aporte_pct}% ({aporte_gwh:.2f} GWh) - Promedio del mes")
+                    print(f"✅ Aportes calculados: {aporte_pct}% (Media histórica: {aporte_gwh:.2f} GWh) - Promedio del mes")
         
         # === 3. GENERACIÓN SIN ===
         # METODOLOGÍA CORRECTA: Sumar generación de TODAS las plantas (Gene/Recurso)
