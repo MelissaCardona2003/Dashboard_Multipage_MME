@@ -101,7 +101,8 @@ def obtener_metricas_hidricas():
                 
                 if media_promedio > 0:
                     aporte_pct = round((aportes_promedio / media_promedio) * 100, 2)
-                    aporte_gwh = aportes_promedio
+                    # Convertir de Wh a GWh (dividir por 1,000,000)
+                    aporte_gwh = aportes_promedio / 1e6
                     fecha_aporte = fecha_fin
                     print(f"✅ Aportes calculados: {aporte_pct}% ({aporte_gwh:.2f} GWh) - Promedio del mes")
         
