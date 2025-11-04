@@ -4002,7 +4002,7 @@ def create_dynamic_embalse_table(df_formatted):
     return table
     
 def create_data_table(data):
-    """Tabla simple de datos de caudal con participación porcentual"""
+    """Tabla paginada de datos de caudal con participación porcentual y total siempre visible"""
     if data is None or data.empty:
         return dbc.Alert("No hay datos para mostrar en la tabla.", color="warning")
     
@@ -4015,17 +4015,18 @@ def create_data_table(data):
         df_with_participation[col] = df_with_participation[col].apply(format_date)
     
     # Si tiene columna 'GWh', calcular participación
+    total_value = 0
     if 'GWh' in df_with_participation.columns:
         # Filtrar filas que no sean TOTAL para calcular el porcentaje
         df_no_total = df_with_participation[df_with_participation['GWh'] != 'TOTAL'].copy()
         if not df_no_total.empty:
             # Asegurar que los valores son numéricos
             df_no_total['GWh'] = pd.to_numeric(df_no_total['GWh'], errors='coerce')
-            total = df_no_total['GWh'].sum()
+            total_value = df_no_total['GWh'].sum()
             
-            if total > 0:
+            if total_value > 0:
                 # Calcular porcentajes
-                porcentajes = (df_no_total['GWh'] / total * 100).round(2)
+                porcentajes = (df_no_total['GWh'] / total_value * 100).round(2)
                 
                 # Ajustar para que sume exactamente 100%
                 diferencia = 100 - porcentajes.sum()
@@ -4035,24 +4036,6 @@ def create_data_table(data):
                 
                 # Agregar la columna de participación
                 df_with_participation.loc[df_no_total.index, 'Participación (%)'] = porcentajes.round(2)
-                
-                # Agregar fila TOTAL si no existe
-                has_total_row = any(df_with_participation.iloc[:, 0] == 'TOTAL')
-                if not has_total_row:
-                    # Crear fila total
-                    total_row = {}
-                    for col in df_with_participation.columns:
-                        if col == df_with_participation.columns[0]:  # Primera columna (normalmente 'Fecha')
-                            total_row[col] = 'TOTAL'
-                        elif col == 'GWh':
-                            total_row[col] = format_number(total)
-                        elif col == 'Participación (%)':
-                            total_row[col] = '100.0%'
-                        else:
-                            total_row[col] = ''
-                    
-                    # Agregar la fila total al dataframe
-                    df_with_participation = pd.concat([df_with_participation, pd.DataFrame([total_row])], ignore_index=True)
             else:
                 df_with_participation['Participación (%)'] = 0
         else:
@@ -4068,30 +4051,63 @@ def create_data_table(data):
                 lambda x: format_number(x) if pd.notnull(x) and x != 'TOTAL' else x
             )
     
-    # Detectar si hay columna de totales
-    style_data_conditional = []
-    if 'TOTAL' in df_with_participation.values:
-        # Buscar la columna que contiene el total
-        for col in df_with_participation.columns:
-            if any(df_with_participation[col] == 'TOTAL'):
-                style_data_conditional.append({
-                    'if': {'filter_query': f'{{{col}}} = "TOTAL"'},
-                    'backgroundColor': '#007bff',
-                    'color': 'white',
-                    'fontWeight': 'bold'
-                })
-    
-    return dash_table.DataTable(
-        data=df_with_participation.head(1000).to_dict('records'),
-        columns=[{"name": i, "id": i} for i in df_with_participation.columns],
-        style_cell={'textAlign': 'left', 'padding': '6px', 'fontFamily': 'Arial', 'fontSize': 14},
-        style_header={'backgroundColor': '#e3e3e3', 'fontWeight': 'bold'},
-        style_data={'backgroundColor': '#f8f8f8'},
-        style_data_conditional=style_data_conditional,
-        page_action="none",
-        export_format="xlsx",
-        export_headers="display"
-    )
+    # Crear tabla paginada con total siempre visible
+    return html.Div([
+        # Tabla principal con paginación
+        dash_table.DataTable(
+            data=df_with_participation.to_dict('records'),
+            columns=[{"name": i, "id": i} for i in df_with_participation.columns],
+            style_cell={
+                'textAlign': 'left', 
+                'padding': '8px', 
+                'fontFamily': 'Inter, Arial, sans-serif', 
+                'fontSize': '13px',
+                'whiteSpace': 'normal',
+                'height': 'auto'
+            },
+            style_header={
+                'backgroundColor': '#2c3e50', 
+                'fontWeight': 'bold',
+                'color': 'white',
+                'border': '1px solid #34495e'
+            },
+            style_data={
+                'backgroundColor': '#f8f9fa',
+                'border': '1px solid #dee2e6'
+            },
+            style_data_conditional=[
+                {
+                    'if': {'row_index': 'odd'},
+                    'backgroundColor': '#ffffff'
+                }
+            ],
+            page_size=10,  # Mostrar 10 filas por página
+            page_action='native',  # Paginación nativa
+            page_current=0,
+            style_table={
+                'maxHeight': '400px',
+                'overflowY': 'auto',
+                'overflowX': 'auto'
+            }
+        ),
+        
+        # Fila de TOTAL siempre visible en la parte inferior
+        html.Div([
+            dbc.Card([
+                dbc.CardBody([
+                    html.Div([
+                        html.Strong("📊 TOTAL: ", style={"fontSize": "1.1rem", "color": "#2c3e50"}),
+                        html.Span(f"{format_number(total_value)} GWh", 
+                                 style={"fontSize": "1.1rem", "fontWeight": "bold", "color": "#007bff"}),
+                        html.Span(" | ", style={"margin": "0 10px", "color": "#6c757d"}),
+                        html.Strong("Registros: ", style={"fontSize": "1rem", "color": "#2c3e50"}),
+                        html.Span(f"{len(df_with_participation)}", 
+                                 style={"fontSize": "1rem", "fontWeight": "bold", "color": "#28a745"})
+                    ], className="d-flex align-items-center justify-content-center")
+                ], className="py-2")
+            ], className="mt-2", style={"backgroundColor": "#e3f2fd", "border": "2px solid #007bff"})
+        ])
+    ])
 
 def create_line_chart(data, rio_name=None, start_date=None, end_date=None):
     """Gráfico de líneas moderno de energía con media histórica"""
@@ -4127,14 +4143,14 @@ def create_line_chart(data, rio_name=None, start_date=None, end_date=None):
         px, go = get_plotly_modules()
         fig = go.Figure()
         
-        # Agregar línea de valores reales
+        # Agregar línea de valores reales (negra para consistencia)
         fig.add_trace(go.Scatter(
             x=data[date_col],
             y=data[value_col],
             mode='lines+markers',
             name='Aportes Reales',
-            line=dict(width=3, color='#667eea'),
-            marker=dict(size=8, color='#764ba2', line=dict(width=2, color='white')),
+            line=dict(width=3, color='black'),
+            marker=dict(size=8, color='black', line=dict(width=2, color='white')),
             hovertemplate=f'<b>Fecha:</b> %{{x}}<br><b>{y_label}:</b> %{{y:.2f}}<extra></extra>'
         ))
         
@@ -4274,7 +4290,7 @@ def create_line_chart(data, rio_name=None, start_date=None, end_date=None):
                 ]),
                 html.Div([
                     html.P([
-                        "📊 ", html.Strong("Línea morada:"), " Aportes reales del río. ",
+                        "📊 ", html.Strong("Línea negra:"), " Aportes reales del río. ",
                     ], className="mb-1 text-muted", style={"fontSize": "0.85rem"}),
                     html.P([
                         "📈 ", html.Strong("Línea punteada coloreada:"), " Media histórica: ",
