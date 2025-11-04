@@ -57,8 +57,13 @@ TIPOS_FUENTE = {
     'BIOMASA': {'label': 'Biomasa', 'icon': 'fa-leaf', 'color': COLORS.get('info', '#17a2b8')}
 }
 
+@lru_cache(maxsize=128)
 def obtener_listado_recursos(tipo_fuente='EOLICA'):
-    """Obtener el listado de recursos para un tipo de fuente específico"""
+    """Obtener el listado de recursos para un tipo de fuente específico
+    
+    IMPORTANTE: Usa @lru_cache para evitar consultas repetidas a la API
+    Los resultados se guardan en memoria según tipo_fuente
+    """
     try:
         objetoAPI = get_objetoAPI()
         if objetoAPI is None:
@@ -145,8 +150,15 @@ def _detectar_columna_sic(recursos_df: pd.DataFrame, f_ini: date, f_fin: date):
     print("No fue posible detectar columna SIC")
     return None
 
+# Caché manual para obtener_generacion_plantas (usa fechas Y plantas como key)
+_cache_generacion = {}
+
 def obtener_generacion_plantas(fecha_inicio, fecha_fin, plantas_df=None):
-    """Obtener datos de generación por plantas"""
+    """Obtener datos de generación por plantas
+    
+    IMPORTANTE: Implementa caché manual basado en fechas Y plantas para mejorar performance
+    Cache key incluye identificador único de las plantas para evitar conflictos entre tipos de fuente
+    """
     try:
         objetoAPI = get_objetoAPI()
         if objetoAPI is None or plantas_df is None or plantas_df.empty:
@@ -156,12 +168,24 @@ def obtener_generacion_plantas(fecha_inicio, fecha_fin, plantas_df=None):
         if not col_sic:
             return pd.DataFrame(), pd.DataFrame()
         
+        # Crear identificador único basado en los códigos de plantas
+        # Esto asegura que cada tipo de fuente tenga su propio cache
         codigos = (plantas_df[col_sic].dropna().astype(str).str.strip()
                    .loc[lambda s: s.str.match(r'^[A-Z0-9]{3,6}$', na=False)]
                    .unique().tolist())
         
         if not codigos:
             return pd.DataFrame(), pd.DataFrame()
+        
+        # Crear key de caché usando fechas y hash de códigos de plantas
+        # Usamos los primeros 3 códigos ordenados como identificador único
+        plantas_id = '_'.join(sorted(codigos)[:3]) if len(codigos) <= 3 else '_'.join(sorted(codigos)[:3]) + f'_{len(codigos)}'
+        cache_key = f"{fecha_inicio}_{fecha_fin}_{plantas_id}"
+        
+        # Si está en caché, retornar directamente
+        if cache_key in _cache_generacion:
+            print(f"⚡ Usando datos en caché para {fecha_inicio} a {fecha_fin} ({len(codigos)} plantas)")
+            return _cache_generacion[cache_key]
         
         df_generacion = fetch_gene_recurso_chunked(objetoAPI, fecha_inicio, fecha_fin, codigos,
                                                    batch_size=50, chunk_days=30)
@@ -201,7 +225,12 @@ def obtener_generacion_plantas(fecha_inicio, fecha_fin, plantas_df=None):
             lambda x: 'Alto' if x>=15 else ('Medio' if x>=5 else 'Bajo')
         )
         
-        return df_generacion, participacion_total
+        # Guardar en caché antes de retornar
+        resultado = (df_generacion, participacion_total)
+        _cache_generacion[cache_key] = resultado
+        print(f"💾 Datos guardados en caché para {fecha_inicio} a {fecha_fin} ({len(codigos)} plantas)")
+        
+        return resultado
     except Exception as e:
         print(f"Error en obtener_generacion_plantas: {e}")
         traceback.print_exc()
@@ -258,37 +287,62 @@ def crear_grafica_temporal_negra(df_generacion, planta_seleccionada=None, tipo_f
     
     # Agrupar por fecha y calcular totales
     df_por_fecha = df_generacion.groupby('Fecha', as_index=False)['Generacion_GWh'].sum().sort_values('Fecha')
-    df_por_fuente = df_generacion.groupby(['Fecha', 'Tipo'], as_index=False)['Generacion_GWh'].sum().sort_values('Fecha')
-    
-    # Crear subplots: 2 filas
+
+    # Si el usuario seleccionó un tipo específico, mostrar análisis por Planta;
+    # si seleccionó 'TODAS' o no especificó, mantener agrupación por Tipo
+    grouping_col = 'Tipo' if (not tipo_fuente or str(tipo_fuente).upper() == 'TODAS') else 'Planta'
+
+    df_por_fuente = df_generacion.groupby(['Fecha', grouping_col], as_index=False)['Generacion_GWh'].sum().sort_values('Fecha')
+
+    # Calcular porcentaje de participación
+    df_por_fuente = df_por_fuente.merge(df_por_fecha[['Fecha', 'Generacion_GWh']], on='Fecha', suffixes=('', '_Total'))
+    df_por_fuente['Participacion_%'] = (df_por_fuente['Generacion_GWh'] / df_por_fuente['Generacion_GWh_Total']) * 100
+
+    # Ordenar categorías (Tipos o Plantas) por generación total (mayor a menor)
+    generacion_por_categoria = df_generacion.groupby(grouping_col)['Generacion_GWh'].sum().sort_values(ascending=False)
+    tipos_ordenados = generacion_por_categoria.index.tolist()
+
+    # Datos para torta (última fecha)
+    ultima_fecha = df_por_fecha['Fecha'].max()
+    df_torta = df_por_fuente[df_por_fuente['Fecha'] == ultima_fecha].sort_values('Participacion_%', ascending=False)
+
+    # Crear subplots: 2 filas, 1 col (SIN TORTA - ahora es independiente)
     fig = make_subplots(
         rows=2, cols=1,
         subplot_titles=(
-            'Generación por Fuente (Barras Apiladas)',
-            'Generación por Fuente (Áreas Apiladas)'
+            'Generación por Fuente (Barras Apiladas - GWh)' if grouping_col == 'Tipo' else 'Generación por Planta (Barras Apiladas - GWh)',
+            'Participación por Fuente (%)' if grouping_col == 'Tipo' else 'Participación por Planta (%)'
         ),
-        vertical_spacing=0.15,
-        specs=[[{"secondary_y": False}], [{"secondary_y": False}]]
+        vertical_spacing=0.12
     )
-    
-    # --- GRÁFICA 1: BARRAS APILADAS ---
-    tipos_ordenados = ['Hidráulica', 'Térmica', 'Eólica', 'Solar', 'Biomasa']
-    for tipo in tipos_ordenados:
-        df_tipo = df_por_fuente[df_por_fuente['Tipo'] == tipo]
-        if not df_tipo.empty:
+
+    # Preparar paleta de colores
+    if grouping_col == 'Tipo':
+        colores_categoria = colores_fuente
+    else:
+        try:
+            palette = px.colors.qualitative.Plotly
+        except Exception:
+            palette = ['#636EFA', '#EF553B', '#00CC96', '#AB63FA', '#FFA15A', '#19D3F3', '#FF6692']
+        colores_categoria = {cat: palette[i % len(palette)] for i, cat in enumerate(tipos_ordenados)}
+
+    # --- GRÁFICA 1: BARRAS APILADAS (GWh) ---
+    for cat in tipos_ordenados:
+        df_cat = df_por_fuente[df_por_fuente[grouping_col] == cat]
+        if not df_cat.empty:
             fig.add_trace(
                 go.Bar(
-                    x=df_tipo['Fecha'],
-                    y=df_tipo['Generacion_GWh'],
-                    name=tipo,
-                    marker_color=colores_fuente.get(tipo, '#666'),
-                    hovertemplate=f'<b>{tipo}</b><br>Fecha: %{{x}}<br>Generación: %{{y:.2f}} GWh<extra></extra>',
-                    legendgroup=tipo,
+                    x=df_cat['Fecha'],
+                    y=df_cat['Generacion_GWh'],
+                    name=str(cat),
+                    marker_color=colores_categoria.get(cat, '#666'),
+                    hovertemplate=f'<b>{cat}</b><br>Fecha: %{{x}}<br>Generación: %{{y:.2f}} GWh<extra></extra>',
+                    legendgroup=str(cat),
                     showlegend=True
                 ),
                 row=1, col=1
             )
-    
+
     # Línea negra de total en gráfica 1
     fig.add_trace(
         go.Scatter(
@@ -303,45 +357,42 @@ def crear_grafica_temporal_negra(df_generacion, planta_seleccionada=None, tipo_f
         ),
         row=1, col=1
     )
-    
-    # --- GRÁFICA 2: ÁREAS APILADAS ---
-    for tipo in tipos_ordenados:
-        df_tipo = df_por_fuente[df_por_fuente['Tipo'] == tipo]
-        if not df_tipo.empty:
+
+    # --- GRÁFICA 2: BARRAS APILADAS (PORCENTAJE) ---
+    for cat in tipos_ordenados:
+        df_cat = df_por_fuente[df_por_fuente[grouping_col] == cat]
+        if not df_cat.empty:
             fig.add_trace(
-                go.Scatter(
-                    x=df_tipo['Fecha'],
-                    y=df_tipo['Generacion_GWh'],
-                    name=tipo,
-                    mode='lines',
-                    stackgroup='one',
-                    fillcolor=colores_fuente.get(tipo, '#666'),
-                    line=dict(width=0.5, color=colores_fuente.get(tipo, '#666')),
-                    hovertemplate=f'<b>{tipo}</b><br>Fecha: %{{x}}<br>Generación: %{{y:.2f}} GWh<extra></extra>',
-                    legendgroup=tipo,
-                    showlegend=False  # Ya se muestra en la primera gráfica
+                go.Bar(
+                    x=df_cat['Fecha'],
+                    y=df_cat['Participacion_%'],
+                    name=str(cat),
+                    marker_color=colores_categoria.get(cat, '#666'),
+                    hovertemplate=f'<b>{cat}</b><br>Fecha: %{{x}}<br>Participación: %{{y:.2f}}%<extra></extra>',
+                    legendgroup=str(cat),
+                    showlegend=False
                 ),
                 row=2, col=1
             )
-    
-    # Línea negra de total en gráfica 2
+
+    # Línea de 100% en gráfica 2
     fig.add_trace(
         go.Scatter(
             x=df_por_fecha['Fecha'],
-            y=df_por_fecha['Generacion_GWh'],
+            y=[100] * len(df_por_fecha),
             mode='lines',
-            name='Total Nacional',
-            line=dict(color='black', width=2),
-            hovertemplate='<b>Total Nacional</b><br>Fecha: %{x}<br>Generación: %{y:.2f} GWh<extra></extra>',
+            name='Total (100%)',
+            line=dict(color='black', width=2, dash='dash'),
+            hovertemplate='<b>Total</b><br>Fecha: %{x}<br>Participación: 100%<extra></extra>',
             legendgroup='total',
-            showlegend=False  # Ya se muestra en la primera gráfica
+            showlegend=False
         ),
         row=2, col=1
     )
     
     # Configurar layout
     fig.update_layout(
-        height=900,
+        height=700,
         hovermode='x unified',
         template='plotly_white',
         barmode='stack',
@@ -357,9 +408,78 @@ def crear_grafica_temporal_negra(df_generacion, planta_seleccionada=None, tipo_f
     # Títulos de ejes
     fig.update_xaxes(title_text="Fecha", row=2, col=1)
     fig.update_yaxes(title_text="Generación (GWh)", row=1, col=1)
-    fig.update_yaxes(title_text="Generación (GWh)", row=2, col=1)
+    fig.update_yaxes(title_text="Participación (%)", row=2, col=1)
     
     return fig
+
+def crear_grafica_torta_fuentes(df_por_fuente, fecha_seleccionada, grouping_col, tipo_fuente):
+    """Crea gráfica de torta para una fecha específica"""
+    px, go = get_plotly_modules()
+    
+    if df_por_fuente.empty:
+        return go.Figure().add_annotation(
+            text="No hay datos disponibles",
+            xref="paper", yref="paper", x=0.5, y=0.5
+        )
+    
+    # Colores para cada tipo de fuente
+    colores_fuente = {
+        'Hidráulica': '#1f77b4',
+        'Térmica': '#ff7f0e',
+        'Eólica': '#2ca02c',
+        'Solar': '#ffbb33',
+        'Biomasa': '#17becf',
+    }
+    
+    # Filtrar datos para la fecha seleccionada
+    df_torta = df_por_fuente[df_por_fuente['Fecha'] == fecha_seleccionada].sort_values('Participacion_%', ascending=False)
+    
+    if df_torta.empty:
+        return go.Figure().add_annotation(
+            text=f"No hay datos para {fecha_seleccionada.strftime('%d/%m/%Y')}",
+            xref="paper", yref="paper", x=0.5, y=0.5
+        )
+    
+    # Preparar colores
+    if grouping_col == 'Tipo':
+        colores_categoria = colores_fuente
+    else:
+        try:
+            palette = px.colors.qualitative.Plotly
+        except Exception:
+            palette = ['#636EFA', '#EF553B', '#00CC96', '#AB63FA', '#FFA15A', '#19D3F3', '#FF6692']
+        generacion_por_categoria = df_torta.sort_values('Generacion_GWh', ascending=False)
+        categorias = generacion_por_categoria[grouping_col].tolist()
+        colores_categoria = {cat: palette[i % len(palette)] for i, cat in enumerate(categorias)}
+    
+    # Crear figura de torta
+    fig = go.Figure()
+    fig.add_trace(
+        go.Pie(
+            labels=df_torta[grouping_col],
+            values=df_torta['Participacion_%'],
+            marker=dict(colors=[colores_categoria.get(cat, '#666') for cat in df_torta[grouping_col]]),
+            textposition='inside',
+            textinfo='label+percent',
+            hovertemplate='<b>%{label}</b><br>Participación: %{value:.2f}%<extra></extra>'
+        )
+    )
+    
+    fig.update_layout(
+        height=400,
+        template='plotly_white',
+        showlegend=True,
+        legend=dict(
+            orientation="v",
+            yanchor="middle",
+            y=0.5,
+            xanchor="left",
+            x=1.05
+        )
+    )
+    
+    return fig
+
 
 def crear_tabla_participacion(df_participacion):
     """Crear tabla de participación por planta con paginación estilo XM"""
@@ -1478,6 +1598,45 @@ def cargar_grafica_barras_apiladas(_):
     return crear_grafica_barras_apiladas()
 
 @callback(
+    [Output('grafica-torta-fuentes', 'figure'),
+     Output('titulo-torta-fuentes', 'children')],
+    [Input('grafica-barras-apiladas', 'clickData')],
+    [State('store-datos-fuentes', 'data')],
+    prevent_initial_call=True
+)
+def actualizar_torta_por_click(clickData, stored_data):
+    """
+    Actualiza el gráfico de torta cuando el usuario hace click en una barra del gráfico apilado.
+    Muestra la composición por fuente para el día seleccionado.
+    """
+    if not clickData or not stored_data:
+        raise PreventUpdate
+    
+    try:
+        # Extraer la fecha del click
+        fecha_click_str = clickData['points'][0]['x']
+        fecha_click = pd.to_datetime(fecha_click_str).date()
+        
+        # Recuperar datos del store
+        df_por_fuente = pd.read_json(StringIO(stored_data['df_por_fuente']), orient='split')
+        df_por_fuente['Fecha'] = pd.to_datetime(df_por_fuente['Fecha']).dt.date
+        grouping_col = stored_data['grouping_col']
+        tipo_fuente = stored_data['tipo_fuente']
+        
+        # Crear nuevo gráfico de torta para la fecha seleccionada
+        nueva_figura = crear_grafica_torta_fuentes(df_por_fuente, fecha_click, grouping_col, tipo_fuente)
+        
+        # Actualizar título con la fecha seleccionada
+        nuevo_titulo = f"Composición por Fuente - {fecha_click.strftime('%d/%m/%Y')}"
+        
+        return nueva_figura, nuevo_titulo
+        
+    except Exception as e:
+        print(f"❌ Error en actualizar_torta_por_click: {e}")
+        raise PreventUpdate
+
+
+@callback(
     Output("grafica-area", "figure"),
     Input("grafica-area", "id")
 )
@@ -1554,6 +1713,24 @@ def actualizar_tablero_fuentes(tipo_fuente, fecha_inicio, fecha_fin, n_clicks, n
                 nombre = df_generacion.loc[df_generacion['Codigo'] == cod_sel, 'Planta']
                 planta_nombre = nombre.iloc[0] if not nombre.empty else None
         
+        # Preparar datos para gráficas (igual que en crear_grafica_temporal_negra)
+        df_generacion_copy = df_generacion.copy()
+        df_generacion_copy['Fecha'] = pd.to_datetime(df_generacion_copy['Fecha'])
+        
+        # Agrupar por fecha
+        df_por_fecha = df_generacion_copy.groupby('Fecha', as_index=False)['Generacion_GWh'].sum().sort_values('Fecha')
+        
+        # Determinar columna de agrupación
+        grouping_col = 'Tipo' if (not tipo_fuente or str(tipo_fuente).upper() == 'TODAS') else 'Planta'
+        
+        # Agrupar por fecha y categoría
+        df_por_fuente = df_generacion_copy.groupby(['Fecha', grouping_col], as_index=False)['Generacion_GWh'].sum().sort_values('Fecha')
+        df_por_fuente = df_por_fuente.merge(df_por_fecha[['Fecha', 'Generacion_GWh']], on='Fecha', suffixes=('', '_Total'))
+        df_por_fuente['Participacion_%'] = (df_por_fuente['Generacion_GWh'] / df_por_fuente['Generacion_GWh_Total']) * 100
+        
+        # Fecha para torta inicial (última fecha)
+        ultima_fecha = df_por_fecha['Fecha'].max()
+        
         # Crear contenido
         if tipo_fuente in TIPOS_FUENTE:
             info_fuente = TIPOS_FUENTE[tipo_fuente]
@@ -1581,9 +1758,35 @@ def actualizar_tablero_fuentes(tipo_fuente, fecha_inicio, fecha_fin, n_clicks, n
                 ]),
                 dbc.CardBody([
                     dcc.Graph(
+                        id='grafica-temporal-fuentes',
                         figure=crear_grafica_temporal_negra(df_generacion, planta_nombre, tipo_fuente),
                         config={'displayModeBar': True}
                     )
+                ])
+            ], className="mb-4"),
+            
+            # Gráfica de torta interactiva (separada)
+            dbc.Card([
+                dbc.CardHeader([
+                    html.H5([
+                        html.I(className="fas fa-chart-pie me-2"),
+                        html.Span("Composición por Fuente", id='titulo-torta-fuentes'),
+                        html.Small(" (Haz clic en las barras para actualizar)", className="text-muted ms-2")
+                    ], className="mb-0")
+                ]),
+                dbc.CardBody([
+                    dcc.Graph(
+                        id='grafica-torta-fuentes',
+                        figure=crear_grafica_torta_fuentes(df_por_fuente, ultima_fecha, grouping_col, tipo_fuente),
+                        config={'displayModeBar': True}
+                    ),
+                    # Store para guardar los datos necesarios para el callback
+                    dcc.Store(id='store-datos-fuentes', data={
+                        'df_por_fuente': df_por_fuente.to_json(date_format='iso', orient='split'),
+                        'grouping_col': grouping_col,
+                        'tipo_fuente': tipo_fuente,
+                        'ultima_fecha': ultima_fecha.isoformat()
+                    })
                 ])
             ], className="mb-4"),
             
@@ -1647,6 +1850,9 @@ def actualizar_fichas_generacion(start_date, end_date, tipo_fuente, n_clicks, n_
         return dbc.Alert(f"Error cargando indicadores: {str(e)}", color="danger")
 
 
+# Caché manual para fichas de generación
+_cache_fichas = {}
+
 # Función auxiliar que recibe las fechas y tipo de fuente como parámetros
 def crear_fichas_generacion_xm_con_fechas(fecha_inicio, fecha_fin, tipo_fuente='TODAS'):
     """
@@ -1656,7 +1862,17 @@ def crear_fichas_generacion_xm_con_fechas(fecha_inicio, fecha_fin, tipo_fuente='
         fecha_inicio: Fecha inicial del período
         fecha_fin: Fecha final del período  
         tipo_fuente: 'TODAS' o tipo específico ('HIDRAULICA', 'TERMICA', etc.)
+    
+    IMPORTANTE: Implementa caché para evitar consultas repetidas a la API
     """
+    # Crear key de caché
+    cache_key = f"{fecha_inicio}_{fecha_fin}_{tipo_fuente}"
+    
+    # Si está en caché, retornar directamente
+    if cache_key in _cache_fichas:
+        print(f"⚡ Usando fichas en caché para {fecha_inicio} a {fecha_fin} - {tipo_fuente}")
+        return _cache_fichas[cache_key]
+    
     try:
         print(f"\n🚀 INICIANDO crear_fichas_generacion_xm_con_fechas()", flush=True)
         objetoAPI = get_objetoAPI()
@@ -1917,6 +2133,11 @@ def crear_fichas_generacion_xm_con_fechas(fecha_inicio, fecha_fin, tipo_fuente='
     ])
 
         print(f"✅ Fichas HTML creadas exitosamente\n")
+        
+        # Guardar en caché antes de retornar
+        _cache_fichas[cache_key] = fichas_html
+        print(f"💾 Fichas guardadas en caché para {fecha_inicio} a {fecha_fin} - {tipo_fuente}")
+        
         return fichas_html
             
     except Exception as e:
