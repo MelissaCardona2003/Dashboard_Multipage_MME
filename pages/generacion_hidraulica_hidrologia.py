@@ -1264,7 +1264,7 @@ def crear_panel_controles():
                     ], className="fw-bold mb-2 d-flex align-items-center"),
                     dcc.DatePickerSingle(
                         id="start-date",
-                        date=date.today() - timedelta(days=30),
+                        date=date.today() - timedelta(days=365),  # Cambiado de 30 a 365 días (1 año)
                         display_format="DD/MM/YYYY",
                         className="form-control-modern",
                         style={"width": "100%"}
@@ -1314,9 +1314,9 @@ def crear_panel_controles():
 def render_hidro_tab_content(active_tab):
     if active_tab == "tab-consulta":
         # Mostrar por defecto la gráfica y tablas de embalse junto con las fichas KPI
-        # Usar el rango por defecto: últimos 30 días
+        # Usar el rango por defecto: último año (365 días)
         fecha_final = date.today()
-        fecha_inicio = fecha_final - timedelta(days=30)
+        fecha_inicio = fecha_final - timedelta(days=365)  # Cambiado de 30 a 365 días
         fecha_inicio_str = fecha_inicio.strftime('%Y-%m-%d')
         fecha_final_str = fecha_final.strftime('%Y-%m-%d')
         # Importante: show_default_view requiere start_date y end_date
