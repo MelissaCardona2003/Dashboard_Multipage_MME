@@ -1542,17 +1542,7 @@ def update_content(n_clicks, rio, start_date, end_date, region):
                 # Agregar el mapa de Colombia como fondo con colores por región natural
                 departamentos_dibujados = 0
                 for feature in colombia_geojson['features']:
-                    if feature['geometry']['type'] == 'Polygon':
-                        coords = feature['geometry']['coordinates'][0]
-                    elif feature['geometry']['type'] == 'MultiPolygon':
-                        coords = feature['geometry']['coordinates'][0][0]
-                    else:
-                        continue
-                    
-                    lons = [c[0] for c in coords]
-                    lats = [c[1] for c in coords]
-                    
-                    # Obtener nombre del departamento y normalizarlo
+                    # Obtener nombre del departamento y normalizarlo PRIMERO
                     nombre_dpto_original = feature['properties'].get('NOMBRE_DPT', '')
                     nombre_dpto = nombre_dpto_original.upper().strip()
                     
@@ -1592,18 +1582,35 @@ def update_content(n_clicks, rio, start_date, end_date, region):
                         hovertext = f"<b>{nombre_dpto_original}</b><br>(Sin región asignada)"
                         print(f"⚠️ Departamento '{nombre_dpto}' no está en mapeo de regiones")
                     
-                    # Dibujar contorno del departamento con color de región natural
-                    fig.add_trace(go.Scattergeo(
-                        lon=lons,
-                        lat=lats,
-                        mode='lines',
-                        line=dict(width=1.5, color=bordercolor),
-                        fill='toself',
-                        fillcolor=fillcolor,
-                        hoverinfo='text',
-                        hovertext=hovertext,
-                        showlegend=False
-                    ))
+                    # Manejar tanto Polygon como MultiPolygon (departamentos con múltiples territorios)
+                    geometry_type = feature['geometry']['type']
+                    
+                    if geometry_type == 'Polygon':
+                        # Un solo polígono - dibujar directamente
+                        coords_list = [feature['geometry']['coordinates'][0]]
+                    elif geometry_type == 'MultiPolygon':
+                        # Múltiples polígonos - dibujar TODOS
+                        coords_list = [poly[0] for poly in feature['geometry']['coordinates']]
+                    else:
+                        continue
+                    
+                    # Dibujar cada polígono del departamento
+                    for coords in coords_list:
+                        lons = [c[0] for c in coords]
+                        lats = [c[1] for c in coords]
+                        
+                        fig.add_trace(go.Scattergeo(
+                            lon=lons,
+                            lat=lats,
+                            mode='lines',
+                            line=dict(width=1.5, color=bordercolor),
+                            fill='toself',
+                            fillcolor=fillcolor,
+                            hoverinfo='text',
+                            hovertext=hovertext,
+                            showlegend=False
+                        ))
+                    
                     departamentos_dibujados += 1
                 
                 print(f"✅ Mapa de Colombia cargado: {departamentos_dibujados} departamentos con regiones naturales")
