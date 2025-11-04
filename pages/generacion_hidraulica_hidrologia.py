@@ -2077,15 +2077,20 @@ def update_content(n_clicks, rio, start_date, end_date, region):
                 html.H5(f"⚡ Río {rio} - Serie Temporal Completa de Aportes de Energía", className="text-center mb-2"),
                 html.P(f"Análisis detallado del río {rio} incluyendo gráfico de tendencias temporales y tabla de datos diarios. Los valores están expresados en gigavatios-hora (GWh) y representan el aporte energético del río.", className="text-center text-muted mb-3", style={"fontSize": "0.9rem"}),
                 
+                # Gráfico arriba (ancho completo para mejor visualización)
                 dbc.Row([
                     dbc.Col([
                         html.H6("📈 Evolución Temporal", className="text-center mb-2"),
                         create_line_chart(plot_df, rio_name=rio, start_date=start_date, end_date=end_date)
-                    ], md=7),
+                    ], md=12)
+                ], className="mb-4"),
+                
+                # Tabla debajo (ancho completo)
+                dbc.Row([
                     dbc.Col([
                         html.H6("📊 Datos Detallados", className="text-center mb-2"),
                         create_data_table(plot_df)
-                    ], md=5)
+                    ], md=12)
                 ])
             ])
 
@@ -4159,22 +4164,73 @@ def create_line_chart(data, rio_name=None, start_date=None, end_date=None):
                         # Convertir de kWh a GWh
                         media_hist_rio['Value'] = media_hist_rio['Value'] / 1_000_000
                         
-                        # Agregar línea de media histórica (azul)
-                        fig.add_trace(go.Scatter(
-                            x=media_hist_rio['Date'],
-                            y=media_hist_rio['Value'],
-                            mode='lines',
-                            name='Media Histórica',
-                            line=dict(width=2, color='#1e90ff', dash='dash'),
-                            hovertemplate=f'<b>Fecha:</b> %{{x}}<br><b>Media Histórica:</b> %{{y:.2f}} GWh<extra></extra>'
-                        ))
-                        tiene_media = True
+                        # Combinar datos reales e históricos para colorear según estado
+                        # Necesitamos preparar los datos reales en formato adecuado
+                        datos_reales = data[[date_col, value_col]].copy()
+                        datos_reales.columns = ['Date', 'Value_real']
+                        datos_reales['Date'] = pd.to_datetime(datos_reales['Date'])
+                        
+                        media_hist_rio['Date'] = pd.to_datetime(media_hist_rio['Date'])
+                        
+                        # Merge para comparación
+                        merged_data = datos_reales.merge(
+                            media_hist_rio[['Date', 'Value']], 
+                            on='Date', 
+                            how='inner'
+                        )
+                        merged_data.rename(columns={'Value': 'Value_hist'}, inplace=True)
+                        
+                        if not merged_data.empty:
+                            # Calcular porcentaje
+                            merged_data['porcentaje'] = (merged_data['Value_real'] / merged_data['Value_hist']) * 100
+                            
+                            # Agregar línea histórica con colores dinámicos
+                            for i in range(len(merged_data) - 1):
+                                porcentaje = merged_data.iloc[i]['porcentaje']
+                                
+                                # Determinar color según porcentaje
+                                if porcentaje >= 100:
+                                    color = '#28a745'  # Verde - Húmedo
+                                    estado = 'Húmedo'
+                                elif porcentaje >= 90:
+                                    color = '#17a2b8'  # Cyan - Normal
+                                    estado = 'Normal'
+                                elif porcentaje >= 70:
+                                    color = '#ffc107'  # Amarillo - Moderadamente seco
+                                    estado = 'Moderadamente seco'
+                                else:
+                                    color = '#dc3545'  # Rojo - Muy seco
+                                    estado = 'Muy seco'
+                                
+                                # Agregar segmento de línea
+                                fig.add_trace(go.Scatter(
+                                    x=merged_data['Date'].iloc[i:i+2],
+                                    y=merged_data['Value_hist'].iloc[i:i+2],
+                                    mode='lines',
+                                    name='Media Histórica' if i == 0 else None,
+                                    showlegend=(i == 0),
+                                    line=dict(width=3, color=color, dash='dash'),
+                                    hovertemplate=f'<b>Fecha:</b> %{{x}}<br><b>Media Histórica:</b> %{{y:.2f}} GWh<br><b>Estado:</b> {estado} ({porcentaje:.1f}%)<extra></extra>',
+                                    legendgroup='media_historica'
+                                ))
+                            tiene_media = True
+                        else:
+                            # Fallback: línea azul simple si no hay datos para comparar
+                            fig.add_trace(go.Scatter(
+                                x=media_hist_rio['Date'],
+                                y=media_hist_rio['Value'],
+                                mode='lines',
+                                name='Media Histórica',
+                                line=dict(width=3, color='#1e90ff', dash='dash'),
+                                hovertemplate=f'<b>Fecha:</b> %{{x}}<br><b>Media Histórica:</b> %{{y:.2f}} GWh<extra></extra>'
+                            ))
+                            tiene_media = True
             except Exception as e:
                 print(f"⚠️ No se pudo obtener media histórica para río {rio_name}: {e}")
         
         # Aplicar tema moderno
         fig.update_layout(
-            height=400,
+            height=500,  # Aumentado de 400 a 500 para mejor visualización
             margin=dict(l=20, r=20, t=40, b=20),
             plot_bgcolor='rgba(0,0,0,0)',
             paper_bgcolor='rgba(0,0,0,0)',
@@ -4210,8 +4266,24 @@ def create_line_chart(data, rio_name=None, start_date=None, end_date=None):
         
         return dbc.Card([
             dbc.CardHeader([
-                html.I(className="bi bi-graph-up-arrow me-2", style={"color": "#667eea"}),
-                html.Strong("Evolución Temporal", style={"fontSize": "1.1rem"})
+                html.Div([
+                    html.Div([
+                        html.I(className="bi bi-graph-up-arrow me-2", style={"color": "#667eea"}),
+                        html.Strong("Evolución Temporal", style={"fontSize": "1.1rem"})
+                    ], className="d-flex align-items-center"),
+                ]),
+                html.Div([
+                    html.P([
+                        "📊 ", html.Strong("Línea morada:"), " Aportes reales del río. ",
+                    ], className="mb-1 text-muted", style={"fontSize": "0.85rem"}),
+                    html.P([
+                        "📈 ", html.Strong("Línea punteada coloreada:"), " Media histórica: ",
+                        html.Span("🟢 Verde", style={"color": "#28a745", "fontWeight": "bold"}), " (>100%), ",
+                        html.Span("🔵 Cyan", style={"color": "#17a2b8", "fontWeight": "bold"}), " (90-100%), ",
+                        html.Span("🟡 Amarillo", style={"color": "#ffc107", "fontWeight": "bold"}), " (70-90%), ",
+                        html.Span("🔴 Rojo", style={"color": "#dc3545", "fontWeight": "bold"}), " (<70%)."
+                    ], className="mb-0 text-muted", style={"fontSize": "0.85rem"}),
+                ], className="mt-2")
             ]),
             dbc.CardBody([
                 dcc.Graph(figure=fig)
