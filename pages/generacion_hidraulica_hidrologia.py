@@ -26,9 +26,9 @@ except ImportError:
     print("⚠️ pydataxm no está disponible. Algunos datos pueden no cargarse correctamente.")
 
 # NOTA IMPORTANTE SOBRE UNIDADES DE MEDIDA:
-# La métrica 'AporCaudal' de XM representa aportes de caudal por río
-# Su unidad de medida es m³/s (metros cúbicos por segundo), NO GWh
-# Los caudales son medidas volumétricas, no energéticas
+# La métrica 'AporEner' de XM representa aportes de energía por río
+# Su unidad de medida es kWh (kilovatio-hora), convertida a GWh para visualización
+# Los aportes energéticos representan la energía potencial de los caudales
 
 # Imports locales para componentes uniformes
 from utils.components import crear_header, crear_navbar, crear_sidebar_universal, crear_boton_regresar
@@ -1334,7 +1334,12 @@ def render_hidro_tab_content(active_tab):
                         html.P("Ajuste el rango de fechas y vuelva a intentar.", className="mb-0")
                     ], color="warning", className="text-start")
                 try:
-                    data = objetoAPI.request_data('AporCaudal', 'Rio', start_date, end_date)
+                    data = objetoAPI.request_data('AporEner', 'Rio', start_date, end_date)
+                    
+                    # Convertir de kWh a GWh
+                    if data is not None and not data.empty and 'Value' in data.columns:
+                        data['Value'] = data['Value'] / 1_000_000  # kWh a GWh
+                    
                     if data is None or data.empty:
                         return dbc.Alert([
                             html.H6("Sin datos", className="alert-heading"),
@@ -1767,7 +1772,12 @@ def update_content(n_clicks, rio, start_date, end_date, region):
             ], color="warning", className="text-start")
         
         try:
-            data = objetoAPI.request_data('AporCaudal', 'Rio', start_date, end_date)
+            data = objetoAPI.request_data('AporEner', 'Rio', start_date, end_date)
+            
+            # Convertir de kWh a GWh
+            if data is not None and not data.empty and 'Value' in data.columns:
+                data['Value'] = data['Value'] / 1_000_000  # kWh a GWh
+            
             if data is None or data.empty:
                 return dbc.Alert([
                     html.H6("Sin datos", className="alert-heading"),
@@ -1787,7 +1797,56 @@ def update_content(n_clicks, rio, start_date, end_date, region):
                 regiones_totales, df_completo_embalses = get_tabla_regiones_embalses(fecha_embalse, fecha_embalse)
                 return html.Div([
                     html.H5("🇨🇴 Contribución Energética por Región Hidrológica de Colombia", className="text-center mb-2"),
-                    html.P("Vista panorámica nacional: Series temporales comparativas de aportes de caudal por región hidrológica. Haga clic en cualquier punto para ver el detalle agregado diario de la región. Los datos incluyen todos los ríos monitoreados en el período seleccionado, agrupados por región para análisis comparativo nacional.", className="text-center text-muted mb-3", style={"fontSize": "0.9rem"}),
+                    dbc.Alert([
+                        html.H6([
+                            html.I(className="bi bi-info-circle-fill me-2"),
+                            "Guía de Interpretación: Aportes Reales vs Media Histórica"
+                        ], className="alert-heading mb-3"),
+                        html.P([
+                            html.Strong("🎯 Objetivo: "), 
+                            "Comparar los aportes energéticos actuales con el promedio histórico para identificar condiciones hídricas del país."
+                        ], className="mb-2"),
+                        html.Hr(),
+                        html.Div([
+                            html.Div([
+                                html.Strong("📊 Aportes Reales (Línea Negra):", className="text-dark"),
+                                html.Ul([
+                                    html.Li("Valores actuales de cada día del período seleccionado"),
+                                    html.Li("Reflejan las condiciones climáticas presentes (lluvias actuales)"),
+                                    html.Li("Varían día a día según el clima")
+                                ], className="mb-2")
+                            ], className="mb-2"),
+                            html.Div([
+                                html.Strong("📈 Media Histórica (Línea Azul Punteada):", className="text-primary"),
+                                html.Ul([
+                                    html.Li("Promedio de todos los años anteriores para ese mes"),
+                                    html.Li("Representa lo 'normal' o 'esperado' basado en historia"),
+                                    html.Li("Sirve como línea base para comparar")
+                                ], className="mb-2")
+                            ], className="mb-2"),
+                        ]),
+                        html.Hr(),
+                        html.Div([
+                            html.Strong("🔍 Cómo Interpretar la Gráfica:", className="text-dark"),
+                            html.Div([
+                                dbc.Row([
+                                    dbc.Col([
+                                        dbc.Badge("Por Encima", color="success", className="me-2"),
+                                        html.Span("Real > Histórico → Mes más húmedo (bueno para generación)", className="small")
+                                    ], md=4, className="mb-2"),
+                                    dbc.Col([
+                                        dbc.Badge("Por Debajo", color="danger", className="me-2"),
+                                        html.Span("Real < Histórico → Mes más seco (alerta para generación)", className="small")
+                                    ], md=4, className="mb-2"),
+                                    dbc.Col([
+                                        dbc.Badge("Normal", color="info", className="me-2"),
+                                        html.Span("Real ≈ Histórico → Condiciones normales", className="small")
+                                    ], md=4, className="mb-2"),
+                                ])
+                            ], className="mt-2")
+                        ])
+                    ], color="light", className="mb-3"),
+                    html.P("Vista panorámica nacional: Series temporales comparativas de aportes de energía por región hidrológica. Haga clic en cualquier punto para ver el detalle agregado diario de la región. Los datos están expresados en GWh (gigavatios-hora) e incluyen todos los ríos monitoreados en el período seleccionado, agrupados por región para análisis comparativo nacional.", className="text-center text-muted mb-3", style={"fontSize": "0.9rem"}),
                     
                     dbc.Row([
                         dbc.Col([
@@ -1992,7 +2051,11 @@ def update_content(n_clicks, rio, start_date, end_date, region):
         ], color="warning", className="text-start")
 
     try:
-        data = objetoAPI.request_data('AporCaudal', 'Rio', start_date, end_date)
+        data = objetoAPI.request_data('AporEner', 'Rio', start_date, end_date)
+        
+        # Convertir de kWh a GWh
+        if data is not None and not data.empty and 'Value' in data.columns:
+            data['Value'] = data['Value'] / 1_000_000  # kWh a GWh
         
         if data is None or data.empty:
             return dbc.Alert([
@@ -2009,15 +2072,15 @@ def update_content(n_clicks, rio, start_date, end_date, region):
                 return dbc.Alert("No se encontraron datos para el río seleccionado.", color="warning")
             plot_df = data_rio.copy()
             if 'Date' in plot_df.columns and 'Value' in plot_df.columns:
-                plot_df = plot_df[['Date', 'Value']].rename(columns={'Date': 'Fecha', 'Value': 'm³/s'})
+                plot_df = plot_df[['Date', 'Value']].rename(columns={'Date': 'Fecha', 'Value': 'GWh'})
             return html.Div([
-                html.H5(f"🌊 Río {rio} - Serie Temporal Completa de Aportes de Caudal", className="text-center mb-2"),
-                html.P(f"Análisis detallado del río {rio} incluyendo gráfico de tendencias temporales y tabla de datos diarios. Los valores están expresados en metros cúbicos por segundo (m³/s) y representan el caudal volumétrico del río.", className="text-center text-muted mb-3", style={"fontSize": "0.9rem"}),
+                html.H5(f"⚡ Río {rio} - Serie Temporal Completa de Aportes de Energía", className="text-center mb-2"),
+                html.P(f"Análisis detallado del río {rio} incluyendo gráfico de tendencias temporales y tabla de datos diarios. Los valores están expresados en gigavatios-hora (GWh) y representan el aporte energético del río.", className="text-center text-muted mb-3", style={"fontSize": "0.9rem"}),
                 
                 dbc.Row([
                     dbc.Col([
                         html.H6("📈 Evolución Temporal", className="text-center mb-2"),
-                        create_line_chart(plot_df)
+                        create_line_chart(plot_df, rio_name=rio, start_date=start_date, end_date=end_date)
                     ], md=7),
                     dbc.Col([
                         html.H6("📊 Datos Detallados", className="text-center mb-2"),
@@ -2217,9 +2280,9 @@ def update_content(n_clicks, rio, start_date, end_date, region):
         if 'Name' in data_filtered.columns and 'Value' in data_filtered.columns:
             # Para región específica, crear gráfica temporal de esa región
             if region and region != "__ALL_REGIONS__":
-                # Crear gráfica temporal para la región específica
-                region_temporal_data = data_filtered.groupby('Date')['Value'].sum().reset_index()
-                region_temporal_data['Region'] = region_normalized
+                # Para región específica, pasar datos SIN agregar para que create_total_timeline_chart
+                # pueda hacer el filtrado correcto de la media histórica
+                region_temporal_data = data_filtered[['Date', 'Name', 'Value']].copy()
                 
                 return html.Div([
                     html.H5(f"🏞️ Evolución Temporal de Aportes de Caudal - Región {region_normalized}", className="text-center mb-2"),
@@ -2227,7 +2290,7 @@ def update_content(n_clicks, rio, start_date, end_date, region):
                     
                     dbc.Row([
                         dbc.Col([
-                            create_total_timeline_chart(region_temporal_data, f"Aportes región {region_normalized}")
+                            create_total_timeline_chart(region_temporal_data, f"Aportes región {region_normalized}", region_filter=region_normalized)
                         ], md=12)
                     ]),
                     dcc.Store(id="region-data-store", data=data_filtered.to_dict('records')),
@@ -4025,8 +4088,8 @@ def create_data_table(data):
         export_headers="display"
     )
 
-def create_line_chart(data):
-    """Gráfico de líneas moderno de caudal"""
+def create_line_chart(data, rio_name=None, start_date=None, end_date=None):
+    """Gráfico de líneas moderno de energía con media histórica"""
     if data is None or data.empty:
         return dbc.Alert("No se pueden crear gráficos con estos datos.", color="warning", className="alert-modern")
     
@@ -4055,9 +4118,59 @@ def create_line_chart(data):
         else:
             y_label = value_col
         
-        fig = px.line(data, x=date_col, y=value_col, 
-                     labels={value_col: y_label, date_col: "Fecha"}, 
-                     markers=True)
+        # Crear figura base con plotly graph objects
+        px, go = get_plotly_modules()
+        fig = go.Figure()
+        
+        # Agregar línea de valores reales
+        fig.add_trace(go.Scatter(
+            x=data[date_col],
+            y=data[value_col],
+            mode='lines+markers',
+            name='Aportes Reales',
+            line=dict(width=3, color='#667eea'),
+            marker=dict(size=8, color='#764ba2', line=dict(width=2, color='white')),
+            hovertemplate=f'<b>Fecha:</b> %{{x}}<br><b>{y_label}:</b> %{{y:.2f}}<extra></extra>'
+        ))
+        
+        # Obtener media histórica si tenemos nombre de río y fechas
+        tiene_media = False
+        if rio_name and start_date and end_date:
+            try:
+                # Convertir fechas a string si es necesario
+                if hasattr(start_date, 'strftime'):
+                    fecha_inicio_str = start_date.strftime('%Y-%m-%d')
+                else:
+                    fecha_inicio_str = str(start_date)
+                
+                if hasattr(end_date, 'strftime'):
+                    fecha_fin_str = end_date.strftime('%Y-%m-%d')
+                else:
+                    fecha_fin_str = str(end_date)
+                
+                # Obtener media histórica
+                media_hist_data = fetch_metric_data('AporEnerMediHist', 'Rio', fecha_inicio_str, fecha_fin_str)
+                
+                if media_hist_data is not None and not media_hist_data.empty:
+                    # Filtrar por el río específico
+                    media_hist_rio = media_hist_data[media_hist_data['Name'] == rio_name]
+                    
+                    if not media_hist_rio.empty and 'Value' in media_hist_rio.columns:
+                        # Convertir de kWh a GWh
+                        media_hist_rio['Value'] = media_hist_rio['Value'] / 1_000_000
+                        
+                        # Agregar línea de media histórica (azul)
+                        fig.add_trace(go.Scatter(
+                            x=media_hist_rio['Date'],
+                            y=media_hist_rio['Value'],
+                            mode='lines',
+                            name='Media Histórica',
+                            line=dict(width=2, color='#1e90ff', dash='dash'),
+                            hovertemplate=f'<b>Fecha:</b> %{{x}}<br><b>Media Histórica:</b> %{{y:.2f}} GWh<extra></extra>'
+                        ))
+                        tiene_media = True
+            except Exception as e:
+                print(f"⚠️ No se pudo obtener media histórica para río {rio_name}: {e}")
         
         # Aplicar tema moderno
         fig.update_layout(
@@ -4073,7 +4186,8 @@ def create_line_chart(data):
                 gridcolor='rgba(128,128,128,0.2)',
                 showline=True,
                 linewidth=2,
-                linecolor='rgba(128,128,128,0.3)'
+                linecolor='rgba(128,128,128,0.3)',
+                title="Fecha"
             ),
             yaxis=dict(
                 showgrid=True,
@@ -4081,16 +4195,17 @@ def create_line_chart(data):
                 gridcolor='rgba(128,128,128,0.2)',
                 showline=True,
                 linewidth=2,
-                linecolor='rgba(128,128,128,0.3)'
+                linecolor='rgba(128,128,128,0.3)',
+                title=y_label
+            ),
+            showlegend=tiene_media,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
             )
-        )
-        
-        # Estilo moderno de la línea
-        fig.update_traces(
-            line=dict(width=3, color='#667eea'),
-            marker=dict(size=8, color='#764ba2', 
-                       line=dict(width=2, color='white')),
-            hovertemplate=f'<b>Fecha:</b> %{{x}}<br><b>{y_label}:</b> %{{y:.2f}}<extra></extra>'
         )
         
         return dbc.Card([
@@ -4570,8 +4685,8 @@ def create_porcapor_kpi(fecha_inicio, fecha_fin, region=None, rio=None):
            "minHeight": "200px"
        })
 
-def create_total_timeline_chart(data, metric_name):
-    """Crear gráfico de línea temporal con total nacional por día"""
+def create_total_timeline_chart(data, metric_name, region_filter=None, rio_filter=None):
+    """Crear gráfico de línea temporal con total nacional/regional/río por día incluyendo media histórica filtrada"""
     if data is None or data.empty:
         return dbc.Alert("No se pueden crear gráficos con estos datos.", 
                         color="warning", className="alert-modern")
@@ -4581,27 +4696,143 @@ def create_total_timeline_chart(data, metric_name):
         return dbc.Alert("No se encuentran las columnas necesarias (Date, Value).", 
                         color="warning", className="alert-modern")
     
-    # Agrupar por fecha y sumar todos los valores de todas las regiones
+    # Agrupar por fecha y sumar todos los valores
     daily_totals = data.groupby('Date')['Value'].sum().reset_index()
     daily_totals = daily_totals.sort_values('Date')
     
-    # Crear gráfico de línea con una sola línea negra
-    fig = px.line(
-        daily_totals,
-        x='Date',
-        y='Value',
-        title="Total Nacional de Aportes de Caudal por Día",
-        labels={'Value': "Caudal (m³/s)", 'Date': "Fecha"},
-        markers=True
-    )
+    # Obtener media histórica y calcular indicador
+    porcentaje_vs_historico = None
+    promedio_real = None
+    promedio_historico = None
     
-    # Estilo moderno con línea negra
+    try:
+        fecha_inicio = daily_totals['Date'].min().strftime('%Y-%m-%d')
+        fecha_fin = daily_totals['Date'].max().strftime('%Y-%m-%d')
+        
+        print(f"🔍 Consultando AporEnerMediHist desde {fecha_inicio} hasta {fecha_fin}")
+        
+        # Obtener datos de media histórica de energía por río
+        media_hist_data = fetch_metric_data('AporEnerMediHist', 'Rio', fecha_inicio, fecha_fin)
+        
+        print(f"📥 Datos recibidos de AporEnerMediHist: {len(media_hist_data) if media_hist_data is not None else 0} registros")
+        if media_hist_data is not None and not media_hist_data.empty:
+            print(f"📊 Columnas disponibles: {media_hist_data.columns.tolist()}")
+            print(f"📊 Primeras 3 filas completas:")
+            print(media_hist_data.head(3))
+            print(f"📊 Valores de muestra ANTES de conversión: {media_hist_data['Value'].head(3).tolist()}")
+            print(f"📊 Rango de valores: min={media_hist_data['Value'].min()}, max={media_hist_data['Value'].max()}")
+            print(f"📊 Nombres de ríos únicos: {media_hist_data['Name'].unique()[:5].tolist() if 'Name' in media_hist_data.columns else 'Sin columna Name'}")
+        
+        if media_hist_data is not None and not media_hist_data.empty and 'Value' in media_hist_data.columns:
+            # IMPORTANTE: Verificar si los valores ya están en GWh o si necesitan conversión
+            # Si los valores son muy pequeños (< 1), probablemente ya están en GWh
+            # Si son grandes (> 1000), están en kWh y necesitan conversión
+            valor_promedio = media_hist_data['Value'].mean()
+            print(f"📊 Valor promedio RAW: {valor_promedio}")
+            
+            if valor_promedio > 1000:
+                # Valores grandes = están en kWh, convertir a GWh
+                print(f"✅ Aplicando conversión kWh → GWh (valores > 1000)")
+                media_hist_data['Value'] = media_hist_data['Value'] / 1_000_000
+            elif valor_promedio < 0.001:
+                # Valores extremadamente pequeños = datos corruptos o ya sobre-convertidos
+                print(f"⚠️ ADVERTENCIA: Valores sospechosamente pequeños (promedio={valor_promedio})")
+                print(f"⚠️ Esto sugiere datos corruptos o problema en la API")
+                # Intentar sin conversión
+            else:
+                # Valores entre 0.001 y 1000 = probablemente ya en GWh
+                print(f"✅ Valores parecen estar ya en GWh (promedio={valor_promedio}), sin conversión")
+            
+            print(f"📊 Valores DESPUÉS de procesamiento: {media_hist_data['Value'].head(3).tolist()}")
+            
+            # FILTRAR por región o río si se especifica
+            if region_filter:
+                # Agregar mapeo de región
+                rio_region = ensure_rio_region_loaded()
+                media_hist_data['Region'] = media_hist_data['Name'].map(rio_region)
+                # Filtrar por región
+                antes_filtro = len(media_hist_data)
+                media_hist_data = media_hist_data[media_hist_data['Region'] == region_filter]
+                print(f"📊 Media histórica filtrada por región '{region_filter}': {antes_filtro} → {len(media_hist_data)} registros")
+            elif rio_filter:
+                # Filtrar por río específico
+                antes_filtro = len(media_hist_data)
+                media_hist_data = media_hist_data[media_hist_data['Name'] == rio_filter]
+                print(f"📊 Media histórica filtrada por río '{rio_filter}': {antes_filtro} → {len(media_hist_data)} registros")
+            
+            # Agrupar por fecha y sumar
+            if not media_hist_data.empty:
+                media_hist_totals = media_hist_data.groupby('Date')['Value'].sum().reset_index()
+                media_hist_totals = media_hist_totals.sort_values('Date')
+                tiene_media = True
+                
+                print(f"✅ Media histórica agregada por fecha: {len(media_hist_totals)} días")
+                print(f"📊 Valores agregados de muestra: {media_hist_totals['Value'].head(3).tolist()}")
+                print(f"📊 Total agregado: min={media_hist_totals['Value'].min():.2f}, max={media_hist_totals['Value'].max():.2f}, promedio={media_hist_totals['Value'].mean():.2f} GWh")
+                
+                # Calcular porcentaje comparativo
+                promedio_real = daily_totals['Value'].mean()
+                promedio_historico = media_hist_totals['Value'].mean()
+                
+                if promedio_historico > 0:
+                    porcentaje_vs_historico = (promedio_real / promedio_historico) * 100
+                    print(f"📊 Comparación: Real promedio={promedio_real:.2f} GWh vs Histórico={promedio_historico:.2f} GWh ({porcentaje_vs_historico:.1f}%)")
+            else:
+                tiene_media = False
+                print(f"⚠️ No hay datos después del filtrado")
+        else:
+            tiene_media = False
+            print(f"⚠️ No se recibieron datos válidos de AporEnerMediHist")
+    except Exception as e:
+        print(f"⚠️ No se pudo obtener media histórica: {e}")
+        import traceback
+        traceback.print_exc()
+        tiene_media = False
+    
+    # Crear figura base
+    from plotly.subplots import make_subplots
+    px, go = get_plotly_modules()
+    
+    fig = go.Figure()
+    
+    # Agregar línea de valores reales (negra)
+    fig.add_trace(go.Scatter(
+        x=daily_totals['Date'],
+        y=daily_totals['Value'],
+        mode='lines+markers',
+        name='Aportes Reales',
+        line=dict(width=3, color='black'),
+        marker=dict(size=8, color='black', line=dict(width=2, color='white')),
+        hovertemplate='<b>Fecha:</b> %{x}<br><b>Total Nacional:</b> %{y:.2f} GWh<extra></extra>'
+    ))
+    
+    # Agregar línea de media histórica (azul) si está disponible
+    if tiene_media:
+        fig.add_trace(go.Scatter(
+            x=media_hist_totals['Date'],
+            y=media_hist_totals['Value'],
+            mode='lines',
+            name='Media Histórica',
+            line=dict(width=2, color='#1e90ff', dash='dash'),
+            hovertemplate='<b>Fecha:</b> %{x}<br><b>Media Histórica:</b> %{y:.2f} GWh<extra></extra>'
+        ))
+    
+    # Determinar título dinámico según filtros
+    if rio_filter:
+        titulo_grafica = f"Aportes de Energía - Río {rio_filter}"
+    elif region_filter:
+        titulo_grafica = f"Aportes de Energía - Región {region_filter}"
+    else:
+        titulo_grafica = "Total Nacional de Aportes de Energía por Día"
+    
+    # Estilo moderno
     fig.update_layout(
         height=500,
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
         font=dict(family="Inter, Arial, sans-serif", size=12),
         title=dict(
+            text=titulo_grafica,
             font_size=16,
             x=0.5,
             xanchor='center',
@@ -4623,26 +4854,91 @@ def create_total_timeline_chart(data, metric_name):
             showline=True,
             linewidth=2,
             linecolor='rgba(128,128,128,0.3)',
-            title="Caudal (m³/s)"
+            title="Energía (GWh)"
         ),
-        showlegend=False
+        showlegend=tiene_media,
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        )
     )
     
-    # Aplicar línea negra con marcadores
-    fig.update_traces(
-        line=dict(width=3, color='black'),
-        marker=dict(size=8, color='black', 
-                   line=dict(width=2, color='white')),
-        hovertemplate='<b>Fecha:</b> %{x}<br><b>Total Nacional:</b> %{y:.2f} m³/s<extra></extra>'
-    )
+    # Crear indicador visual de comparación
+    indicador_badge = None
+    if porcentaje_vs_historico is not None:
+        # Determinar color y emoji según el porcentaje
+        if porcentaje_vs_historico >= 100:
+            # Por encima del histórico (húmedo)
+            color_badge = "success"
+            icono = "💧"
+            diferencia = porcentaje_vs_historico - 100
+            texto_badge = f"{icono} +{diferencia:.1f}% vs Histórico"
+            texto_contexto = "Condiciones más húmedas que el promedio histórico"
+        elif porcentaje_vs_historico >= 90:
+            # Cerca del histórico (normal)
+            color_badge = "info"
+            icono = "✓"
+            diferencia = 100 - porcentaje_vs_historico
+            texto_badge = f"{icono} -{diferencia:.1f}% vs Histórico"
+            texto_contexto = "Condiciones cercanas al promedio histórico"
+        elif porcentaje_vs_historico >= 70:
+            # Moderadamente bajo (alerta)
+            color_badge = "warning"
+            icono = "⚠️"
+            diferencia = 100 - porcentaje_vs_historico
+            texto_badge = f"{icono} -{diferencia:.1f}% vs Histórico"
+            texto_contexto = "Condiciones más secas que el promedio histórico"
+        else:
+            # Muy bajo (crítico)
+            color_badge = "danger"
+            icono = "🔴"
+            diferencia = 100 - porcentaje_vs_historico
+            texto_badge = f"{icono} -{diferencia:.1f}% vs Histórico"
+            texto_contexto = "Condiciones significativamente más secas que el histórico"
+        
+        indicador_badge = html.Div([
+            dbc.Badge(
+                texto_badge,
+                color=color_badge,
+                className="me-2",
+                style={"fontSize": "0.9rem", "fontWeight": "600"}
+            ),
+            html.Small(texto_contexto, className="text-muted", style={"fontSize": "0.85rem"})
+        ], className="d-flex align-items-center mt-2")
+    
+    # Determinar título del header según filtro
+    if rio_filter:
+        titulo_header = f"Río {rio_filter}"
+    elif region_filter:
+        titulo_header = f"Región {region_filter}"
+    else:
+        titulo_header = "Total Nacional por Día"
     
     return dbc.Card([
         dbc.CardHeader([
             html.Div([
-                html.I(className="bi bi-graph-up me-2", style={"color": "#000"}),
-                html.Strong("Total Nacional por Día", style={"fontSize": "1.2rem"})
-            ], className="d-flex align-items-center"),
-            html.Small("Haz clic en cualquier punto para ver detalles por región", className="text-muted")
+                html.Div([
+                    html.I(className="bi bi-graph-up me-2", style={"color": "#000"}),
+                    html.Strong(titulo_header, style={"fontSize": "1.2rem"})
+                ], className="d-flex align-items-center"),
+                indicador_badge if indicador_badge else None,
+            ]),
+            html.Div([
+                html.P([
+                    "📊 ", html.Strong("Línea negra:"), " Aportes reales del período seleccionado. ",
+                    "📈 ", html.Strong("Línea azul punteada:"), " Media histórica (promedio de todos los años para ese mes). "
+                ], className="mb-1 text-muted", style={"fontSize": "0.85rem"}),
+                html.P([
+                    html.Strong("Cómo interpretar: "), 
+                    "Si la línea negra está ", html.Strong("por encima", style={"color": "#28a745"}), " de la azul = mes más húmedo. ",
+                    "Si está ", html.Strong("por debajo", style={"color": "#dc3545"}), " = mes más seco. ",
+                    "Si están ", html.Strong("cerca", style={"color": "#17a2b8"}), " = condiciones normales."
+                ], className="mb-2 text-muted", style={"fontSize": "0.85rem"}),
+                html.Small("💡 Haz clic en cualquier punto para ver detalles por región", className="text-muted fst-italic")
+            ], className="mt-2")
         ]),
         dbc.CardBody([
             dcc.Graph(id="total-timeline-graph", figure=fig, clear_on_unhover=True)
@@ -4660,7 +4956,7 @@ def show_modal_table(timeline_clickData, is_open, region_data):
     ctx = dash.callback_context
     
     print(f"🚀 CALLBACK EJECUTADO! Triggered: {[prop['prop_id'] for prop in ctx.triggered]}")
-    print(f" Timeline click data: {timeline_clickData}")
+    print(f"📊 Timeline click data: {timeline_clickData}")
     
     # Determinar qué fue clicado
     clickData = None
@@ -4668,21 +4964,139 @@ def show_modal_table(timeline_clickData, is_open, region_data):
     
     if ctx.triggered:
         trigger_id = ctx.triggered[0]["prop_id"]
-# REMOVED DEBUG:         print(f"🔍 DEBUG: Callback triggered - trigger_id: {trigger_id}")
         
         if trigger_id.startswith("total-timeline-graph") and timeline_clickData:
             clickData = timeline_clickData
             graph_type = "timeline"
-            print(f"🎯 DEBUG: Timeline click detected! clickData: {clickData}")
+            print(f"🎯 Click detected! clickData: {clickData}")
         elif trigger_id.startswith("modal-rio-table"):
-# REMOVED DEBUG:             print(f"❌ DEBUG: Modal close triggered")
             return False, None, "", ""
     
     # Si se hace click en un punto del timeline, mostrar el modal con la tabla
     if clickData and graph_type == "timeline":
         point_data = clickData["points"][0]
-# REMOVED DEBUG:         print(f"🔍 DEBUG: point_data extraído: {point_data}")
         
+        # Detectar en qué línea/curva se hizo clic
+        curve_number = point_data.get('curveNumber', 0)
+        trace_name = point_data.get('fullData', {}).get('name', 'Aportes Reales')
+        
+        print(f"📍 Curva clickeada: {curve_number}, Nombre: {trace_name}")
+        
+        # Si se hizo clic en la Media Histórica (curva 1)
+        if curve_number == 1 or 'Media Histórica' in str(trace_name):
+            print(f"📘 Click en MEDIA HISTÓRICA detectado")
+            
+            # Obtener la fecha clicada
+            selected_date = point_data['x']
+            total_value = point_data['y']
+            
+            # Obtener datos de media histórica
+            try:
+                # Necesitamos obtener la media histórica del backend
+                objetoAPI = get_objetoAPI()
+                
+                # Obtener el rango de fechas del store de datos
+                df_store = pd.DataFrame(region_data) if region_data else pd.DataFrame()
+                if not df_store.empty:
+                    fecha_inicio = df_store['Date'].min()
+                    fecha_fin = df_store['Date'].max()
+                    
+                    if isinstance(fecha_inicio, str):
+                        fecha_inicio_str = fecha_inicio
+                    else:
+                        fecha_inicio_str = fecha_inicio.strftime('%Y-%m-%d')
+                    
+                    if isinstance(fecha_fin, str):
+                        fecha_fin_str = fecha_fin
+                    else:
+                        fecha_fin_str = fecha_fin.strftime('%Y-%m-%d')
+                    
+                    # Obtener media histórica
+                    media_hist_data = fetch_metric_data('AporEnerMediHist', 'Rio', fecha_inicio_str, fecha_fin_str)
+                    
+                    if media_hist_data is not None and not media_hist_data.empty:
+                        # Convertir de kWh a GWh (según documentación de XM, AporEnerMediHist viene en kWh)
+                        media_hist_data['Value'] = media_hist_data['Value'] / 1_000_000
+                        
+                        # Agregar información de región
+                        rio_region = ensure_rio_region_loaded()
+                        media_hist_data['Region'] = media_hist_data['Name'].map(rio_region)
+                        
+                        # Filtrar por la fecha seleccionada
+                        selected_date_dt = pd.to_datetime(selected_date)
+                        media_hist_data['Date'] = pd.to_datetime(media_hist_data['Date'])
+                        df_date = media_hist_data[media_hist_data['Date'] == selected_date_dt].copy()
+                        
+                        if not df_date.empty:
+                            # Agrupar por región
+                            region_summary = df_date.groupby('Region')['Value'].sum().reset_index()
+                            region_summary = region_summary.sort_values('Value', ascending=False)
+                            region_summary = region_summary.rename(columns={'Region': 'Región', 'Value': 'Energía (GWh)'})
+                            
+                            # Calcular participación porcentual
+                            total = region_summary['Energía (GWh)'].sum()
+                            
+                            if total > 0:
+                                region_summary['Participación (%)'] = (region_summary['Energía (GWh)'] / total * 100).round(2)
+                                diferencia = 100 - region_summary['Participación (%)'].sum()
+                                if abs(diferencia) > 0.001:
+                                    idx_max = region_summary['Participación (%)'].idxmax()
+                                    region_summary.loc[idx_max, 'Participación (%)'] += diferencia
+                                    region_summary['Participación (%)'] = region_summary['Participación (%)'].round(2)
+                            else:
+                                region_summary['Participación (%)'] = 0
+                            
+                            # Formatear números
+                            region_summary['Energía (GWh)'] = region_summary['Energía (GWh)'].apply(format_number)
+                            
+                            # Agregar fila total
+                            total_row = {
+                                'Región': 'TOTAL',
+                                'Energía (GWh)': format_number(total),
+                                'Participación (%)': '100.0%'
+                            }
+                            
+                            data_with_total = region_summary.to_dict('records') + [total_row]
+                            
+                            # Crear tabla
+                            table = dash_table.DataTable(
+                                data=data_with_total,
+                                columns=[
+                                    {"name": "Región", "id": "Región"},
+                                    {"name": "Energía (GWh)", "id": "Energía (GWh)"},
+                                    {"name": "Participación (%)", "id": "Participación (%)"}
+                                ],
+                                style_cell={'textAlign': 'left', 'padding': '8px', 'fontFamily': 'Inter, Arial', 'fontSize': 14},
+                                style_header={'backgroundColor': '#1e90ff', 'color': 'white', 'fontWeight': 'bold'},
+                                style_data={'backgroundColor': '#f0f8ff'},
+                                style_data_conditional=[
+                                    {
+                                        'if': {'filter_query': '{Región} = "TOTAL"'},
+                                        'backgroundColor': '#1e90ff',
+                                        'color': 'white',
+                                        'fontWeight': 'bold'
+                                    }
+                                ],
+                                page_action="none",
+                                export_format="xlsx",
+                                export_headers="display"
+                            )
+                            
+                            formatted_date = format_date(selected_date)
+                            total_regions = len(region_summary)
+                            title = f"📘 Media Histórica del {formatted_date} - Total Nacional: {format_number(total_value)} GWh"
+                            description = f"Detalle de media histórica por región hidrológica para el día {formatted_date}. Se muestran los aportes energéticos históricos promedio de {total_regions} regiones, con su respectiva participación porcentual sobre el total nacional de {format_number(total_value)} GWh."
+                            
+                            return True, table, title, description
+                        
+            except Exception as e:
+                print(f"❌ Error obteniendo media histórica: {e}")
+                import traceback
+                traceback.print_exc()
+            
+            return False, None, "Error", "No se pudieron obtener los datos de media histórica."
+        
+        # Si se hizo clic en Aportes Reales (curva 0) - código original
         df = pd.DataFrame(region_data) if region_data else pd.DataFrame()
 # REMOVED DEBUG:         print(f"📊 DEBUG: region_data recibido: {type(region_data)}, length: {len(region_data) if region_data else 'None'}")
         print(f"📈 DEBUG: DataFrame creado - shape: {df.shape}, columns: {df.columns.tolist() if not df.empty else 'DataFrame vacío'}")
@@ -4739,16 +5153,16 @@ def show_modal_table(timeline_clickData, is_open, region_data):
         # Agrupar por región para esa fecha
         region_summary = df_date.groupby('Region')['Value'].sum().reset_index()
         region_summary = region_summary.sort_values('Value', ascending=False)
-        region_summary = region_summary.rename(columns={'Region': 'Región', 'Value': 'Caudal (m³/s)'})
+        region_summary = region_summary.rename(columns={'Region': 'Región', 'Value': 'Energía (GWh)'})
 # REMOVED DEBUG:         print(f"📊 DEBUG: region_summary creado - shape: {region_summary.shape}")
         print(f"📈 DEBUG: region_summary contenido: {region_summary.to_dict() if not region_summary.empty else 'Vacío'}")
         
         # Calcular participación porcentual
-        total = region_summary['Caudal (m³/s)'].sum()
+        total = region_summary['Energía (GWh)'].sum()
         print(f"💰 DEBUG: Total calculado: {total}")
         
         if total > 0:
-            region_summary['Participación (%)'] = (region_summary['Caudal (m³/s)'] / total * 100).round(2)
+            region_summary['Participación (%)'] = (region_summary['Energía (GWh)'] / total * 100).round(2)
             # Ajustar para que sume exactamente 100%
             diferencia = 100 - region_summary['Participación (%)'].sum()
             if abs(diferencia) > 0.001:
@@ -4759,12 +5173,12 @@ def show_modal_table(timeline_clickData, is_open, region_data):
             region_summary['Participación (%)'] = 0
         
         # Formatear números
-        region_summary['Caudal (m³/s)'] = region_summary['Caudal (m³/s)'].apply(format_number)
+        region_summary['Energía (GWh)'] = region_summary['Energía (GWh)'].apply(format_number)
         
         # Agregar fila total
         total_row = {
             'Región': 'TOTAL',
-            'Caudal (m³/s)': format_number(total),
+            'Energía (GWh)': format_number(total),
             'Participación (%)': '100.0%'
         }
         
@@ -4775,7 +5189,7 @@ def show_modal_table(timeline_clickData, is_open, region_data):
             data=data_with_total,
             columns=[
                 {"name": "Región", "id": "Región"},
-                {"name": "Caudal (m³/s)", "id": "Caudal (m³/s)"},
+                {"name": "Energía (GWh)", "id": "Energía (GWh)"},
                 {"name": "Participación (%)", "id": "Participación (%)"}
             ],
             style_cell={'textAlign': 'left', 'padding': '8px', 'fontFamily': 'Inter, Arial', 'fontSize': 14},
@@ -4797,8 +5211,8 @@ def show_modal_table(timeline_clickData, is_open, region_data):
         # Crear título y descripción
         formatted_date = format_date(selected_date)
         total_regions = len(region_summary) - 1 if len(region_summary) > 0 else 0
-        title = f"📅 Detalles del {formatted_date} - Total Nacional: {format_number(total_value)} m³/s"
-        description = f"Detalle por región hidrológica para el día {formatted_date}. Se muestran los aportes de caudal de {total_regions} regiones que registraron actividad en esta fecha, con su respectiva participación porcentual sobre el total nacional de {format_number(total_value)} m³/s."
+        title = f"⚡ Detalles del {formatted_date} - Total Nacional: {format_number(total_value)} GWh"
+        description = f"Detalle por región hidrológica para el día {formatted_date}. Se muestran los aportes de energía de {total_regions} regiones que registraron actividad en esta fecha, con su respectiva participación porcentual sobre el total nacional de {format_number(total_value)} GWh."
         
 # REMOVED DEBUG:         print(f"✅ DEBUG: Título: {title}")
 # REMOVED DEBUG:         print(f"✅ DEBUG: Descripción: {description}")
