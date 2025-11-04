@@ -1557,23 +1557,25 @@ def update_content(n_clicks, rio, start_date, end_date, region):
                     nombre_dpto = nombre_dpto_original.upper().strip()
                     
                     # Normalizar nombres especiales
-                    if 'BOGOTA' in nombre_dpto or 'D.C' in nombre_dpto:
+                    if 'BOGOTA' in nombre_dpto or 'D.C' in nombre_dpto or 'D.C.' in nombre_dpto:
                         nombre_dpto = 'CUNDINAMARCA'  # D.C. pertenece a región Andina
-                    if 'NARIÑO' in nombre_dpto_original or 'NARINO' in nombre_dpto:
+                    elif 'SAN ANDRES' in nombre_dpto or 'ARCHIPIELAGO' in nombre_dpto:
+                        nombre_dpto = 'SAN ANDRES Y PROVIDENCIA'  # Región Insular
+                    elif 'NARIÑO' in nombre_dpto_original or 'NARINO' in nombre_dpto:
                         nombre_dpto = 'NARIÑO'
-                    if 'BOYACÁ' in nombre_dpto_original or 'BOYACA' in nombre_dpto:
+                    elif 'BOYACÁ' in nombre_dpto_original or 'BOYACA' in nombre_dpto:
                         nombre_dpto = 'BOYACA'
-                    if 'CÓRDOBA' in nombre_dpto_original or 'CORDOBA' in nombre_dpto:
+                    elif 'CÓRDOBA' in nombre_dpto_original or 'CORDOBA' in nombre_dpto:
                         nombre_dpto = 'CORDOBA'
-                    if 'BOLÍVAR' in nombre_dpto_original or 'BOLIVAR' in nombre_dpto:
+                    elif 'BOLÍVAR' in nombre_dpto_original or 'BOLIVAR' in nombre_dpto:
                         nombre_dpto = 'BOLIVAR'
-                    if 'CAQUETÁ' in nombre_dpto_original or 'CAQUETA' in nombre_dpto:
+                    elif 'CAQUETÁ' in nombre_dpto_original or 'CAQUETA' in nombre_dpto:
                         nombre_dpto = 'CAQUETA'
-                    if 'VAUPÉS' in nombre_dpto_original or 'VAUPES' in nombre_dpto:
+                    elif 'VAUPÉS' in nombre_dpto_original or 'VAUPES' in nombre_dpto:
                         nombre_dpto = 'VAUPES'
-                    if 'GUAINÍA' in nombre_dpto_original or 'GUAINIA' in nombre_dpto:
+                    elif 'GUAINÍA' in nombre_dpto_original or 'GUAINIA' in nombre_dpto:
                         nombre_dpto = 'GUAINIA'
-                    if 'QUINDÍO' in nombre_dpto_original or 'QUINDIO' in nombre_dpto:
+                    elif 'QUINDÍO' in nombre_dpto_original or 'QUINDIO' in nombre_dpto:
                         nombre_dpto = 'QUINDIO'
                     
                     # Determinar color según región natural
