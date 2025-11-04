@@ -1507,45 +1507,40 @@ def update_content(n_clicks, rio, start_date, end_date, region):
             # Crear figura con mapa base de Colombia
             fig = go.Figure()
             
-            # PRIMERO: Intentar cargar GeoJSON de Colombia desde fuente pública
-            # Y colorear regiones según los embalses que contienen
+            # PRIMERO: Cargar GeoJSON local de departamentos de Colombia y mapeo de regiones naturales
             try:
-                # Usar GeoJSON simplificado de Colombia de datos abiertos
-                print("🌍 Descargando mapa geográfico de Colombia...")
-                url_geojson = "https://gist.githubusercontent.com/john-guerra/43c7656821069d00dcbc/raw/be6a6e239cd5b5b803c6e7c2ec405b793a9064dd/Colombia.geo.json"
-                response = requests.get(url_geojson, timeout=10)
-                colombia_geojson = response.json()
+                import json
+                import os
                 
-                # Mapeo de departamentos a regiones hidroeléctricas con colores
-                DEPARTAMENTOS_A_REGIONES = {
-                    # ANTIOQUIA - Verde oscuro
-                    'ANTIOQUIA': {'region': 'ANTIOQUIA', 'color': 'rgba(76, 175, 80, 0.5)', 'border': '#4CAF50'},
-                    
-                    # CALDAS - Morado
-                    'CALDAS': {'region': 'CALDAS', 'color': 'rgba(156, 39, 176, 0.5)', 'border': '#9C27B0'},
-                    
-                    # CARIBE - Naranja claro
-                    'CESAR': {'region': 'CARIBE', 'color': 'rgba(255, 152, 0, 0.5)', 'border': '#FF9800'},
-                    'CÓRDOBA': {'region': 'CARIBE', 'color': 'rgba(255, 152, 0, 0.5)', 'border': '#FF9800'},
-                    
-                    # CENTRO - Amarillo
-                    'CUNDINAMARCA': {'region': 'CENTRO', 'color': 'rgba(255, 235, 59, 0.5)', 'border': '#FFEB3B'},
-                    'BOYACÁ': {'region': 'CENTRO', 'color': 'rgba(255, 235, 59, 0.5)', 'border': '#FFEB3B'},
-                    'SANTANDER': {'region': 'CENTRO', 'color': 'rgba(255, 235, 59, 0.5)', 'border': '#FFEB3B'},
-                    
-                    # ORIENTE - Rosado/Magenta
-                    'META': {'region': 'ORIENTE', 'color': 'rgba(233, 30, 99, 0.5)', 'border': '#E91E63'},
-                    'CASANARE': {'region': 'ORIENTE', 'color': 'rgba(233, 30, 99, 0.5)', 'border': '#E91E63'},
-                    
-                    # VALLE - Violeta/Púrpura
-                    'VALLE DEL CAUCA': {'region': 'VALLE', 'color': 'rgba(103, 58, 183, 0.5)', 'border': '#673AB7'},
-                    'CAUCA': {'region': 'VALLE', 'color': 'rgba(103, 58, 183, 0.5)', 'border': '#673AB7'},
-                    
-                    # SINÚ - Azul claro
-                    'CÓRDOBA': {'region': 'SINÚ', 'color': 'rgba(33, 150, 243, 0.5)', 'border': '#2196F3'},
-                }
+                print("🌍 Cargando mapa de departamentos de Colombia...")
                 
-                # Agregar el mapa de Colombia como fondo con colores por región
+                # Rutas a archivos locales
+                geojson_path = os.path.join(os.path.dirname(__file__), '..', 'utils', 'departamentos_colombia.geojson')
+                regiones_path = os.path.join(os.path.dirname(__file__), '..', 'utils', 'regiones_naturales_colombia.json')
+                
+                # Cargar GeoJSON de departamentos
+                with open(geojson_path, 'r', encoding='utf-8') as f:
+                    colombia_geojson = json.load(f)
+                
+                # Cargar mapeo de regiones naturales
+                with open(regiones_path, 'r', encoding='utf-8') as f:
+                    regiones_config = json.load(f)
+                
+                # Crear diccionario inverso: departamento -> región
+                DEPARTAMENTOS_A_REGIONES = {}
+                for region_key, region_data in regiones_config['regiones'].items():
+                    for depto in region_data['departamentos']:
+                        DEPARTAMENTOS_A_REGIONES[depto] = {
+                            'region': region_data['nombre'],
+                            'color': region_data['color'],
+                            'border': region_data['border']
+                        }
+                
+                print(f"📋 Cargadas {len(regiones_config['regiones'])} regiones naturales")
+                print(f"📋 Mapeados {len(DEPARTAMENTOS_A_REGIONES)} departamentos")
+                
+                # Agregar el mapa de Colombia como fondo con colores por región natural
+                departamentos_dibujados = 0
                 for feature in colombia_geojson['features']:
                     if feature['geometry']['type'] == 'Polygon':
                         coords = feature['geometry']['coordinates'][0]
@@ -1557,23 +1552,45 @@ def update_content(n_clicks, rio, start_date, end_date, region):
                     lons = [c[0] for c in coords]
                     lats = [c[1] for c in coords]
                     
-                    # Obtener nombre del departamento
-                    nombre_dpto = feature['properties'].get('NOMBRE_DPT', '').upper()
+                    # Obtener nombre del departamento y normalizarlo
+                    nombre_dpto_original = feature['properties'].get('NOMBRE_DPT', '')
+                    nombre_dpto = nombre_dpto_original.upper().strip()
                     
-                    # Determinar color según región hidroeléctrica
+                    # Normalizar nombres especiales
+                    if 'BOGOTA' in nombre_dpto or 'D.C' in nombre_dpto:
+                        nombre_dpto = 'CUNDINAMARCA'  # D.C. pertenece a región Andina
+                    if 'NARIÑO' in nombre_dpto_original or 'NARINO' in nombre_dpto:
+                        nombre_dpto = 'NARIÑO'
+                    if 'BOYACÁ' in nombre_dpto_original or 'BOYACA' in nombre_dpto:
+                        nombre_dpto = 'BOYACA'
+                    if 'CÓRDOBA' in nombre_dpto_original or 'CORDOBA' in nombre_dpto:
+                        nombre_dpto = 'CORDOBA'
+                    if 'BOLÍVAR' in nombre_dpto_original or 'BOLIVAR' in nombre_dpto:
+                        nombre_dpto = 'BOLIVAR'
+                    if 'CAQUETÁ' in nombre_dpto_original or 'CAQUETA' in nombre_dpto:
+                        nombre_dpto = 'CAQUETA'
+                    if 'VAUPÉS' in nombre_dpto_original or 'VAUPES' in nombre_dpto:
+                        nombre_dpto = 'VAUPES'
+                    if 'GUAINÍA' in nombre_dpto_original or 'GUAINIA' in nombre_dpto:
+                        nombre_dpto = 'GUAINIA'
+                    if 'QUINDÍO' in nombre_dpto_original or 'QUINDIO' in nombre_dpto:
+                        nombre_dpto = 'QUINDIO'
+                    
+                    # Determinar color según región natural
                     if nombre_dpto in DEPARTAMENTOS_A_REGIONES:
                         info_region = DEPARTAMENTOS_A_REGIONES[nombre_dpto]
                         fillcolor = info_region['color']
                         bordercolor = info_region['border']
                         region_nombre = info_region['region']
-                        hovertext = f"<b>{feature['properties'].get('NOMBRE_DPT', 'Departamento')}</b><br>Región: {region_nombre}"
+                        hovertext = f"<b>{nombre_dpto_original}</b><br>{region_nombre}"
                     else:
-                        # Departamentos sin región hidroeléctrica asignada
+                        # Departamentos sin región asignada (mostrar en gris claro)
                         fillcolor = 'rgba(220, 220, 220, 0.2)'
                         bordercolor = '#999999'
-                        hovertext = f"<b>{feature['properties'].get('NOMBRE_DPT', 'Departamento')}</b>"
+                        hovertext = f"<b>{nombre_dpto_original}</b><br>(Sin región asignada)"
+                        print(f"⚠️ Departamento '{nombre_dpto}' no está en mapeo de regiones")
                     
-                    # Dibujar contorno del departamento con color de región
+                    # Dibujar contorno del departamento con color de región natural
                     fig.add_trace(go.Scattergeo(
                         lon=lons,
                         lat=lats,
@@ -1585,10 +1602,14 @@ def update_content(n_clicks, rio, start_date, end_date, region):
                         hovertext=hovertext,
                         showlegend=False
                     ))
+                    departamentos_dibujados += 1
                 
-                print("✅ Mapa geográfico de Colombia cargado con colores por región")
+                print(f"✅ Mapa de Colombia cargado: {departamentos_dibujados} departamentos con regiones naturales")
+            except FileNotFoundError as e:
+                print(f"⚠️ No se encontró archivo GeoJSON local: {e}")
+                print("   Continuando sin mapa base...")
             except Exception as e:
-                print(f"⚠️ No se pudo cargar mapa de Colombia: {e}")
+                print(f"⚠️ Error al cargar mapa de Colombia: {e}")
                 print("   Continuando sin mapa base...")
             
             # SEGUNDO: Procesar CADA embalse directamente de df_completo_embalses
