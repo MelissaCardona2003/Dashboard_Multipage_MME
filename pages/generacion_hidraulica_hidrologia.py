@@ -4806,16 +4806,60 @@ def create_total_timeline_chart(data, metric_name, region_filter=None, rio_filte
         hovertemplate='<b>Fecha:</b> %{x}<br><b>Total Nacional:</b> %{y:.2f} GWh<extra></extra>'
     ))
     
-    # Agregar línea de media histórica (azul) si está disponible
+    # Agregar línea de media histórica con colores dinámicos según estado hidrológico
     if tiene_media:
-        fig.add_trace(go.Scatter(
-            x=media_hist_totals['Date'],
-            y=media_hist_totals['Value'],
-            mode='lines',
-            name='Media Histórica',
-            line=dict(width=2, color='#1e90ff', dash='dash'),
-            hovertemplate='<b>Fecha:</b> %{x}<br><b>Media Histórica:</b> %{y:.2f} GWh<extra></extra>'
-        ))
+        # Combinar datos reales e históricos por fecha para comparación
+        merged_data = daily_totals.merge(
+            media_hist_totals, 
+            on='Date', 
+            how='inner', 
+            suffixes=('_real', '_hist')
+        )
+        
+        if not merged_data.empty:
+            # Calcular porcentaje: (real / histórico) * 100
+            merged_data['porcentaje'] = (merged_data['Value_real'] / merged_data['Value_hist']) * 100
+            
+            # Crear segmentos de línea coloreados según estado
+            # Verde: > 100% (húmedo), Cyan: 90-100% (normal), Naranja: 70-90% (seco moderado), Rojo: < 70% (muy seco)
+            for i in range(len(merged_data) - 1):
+                porcentaje = merged_data.iloc[i]['porcentaje']
+                
+                # Determinar color según porcentaje
+                if porcentaje >= 100:
+                    color = '#28a745'  # Verde - Húmedo
+                    estado = 'Húmedo'
+                elif porcentaje >= 90:
+                    color = '#17a2b8'  # Cyan - Normal
+                    estado = 'Normal'
+                elif porcentaje >= 70:
+                    color = '#ffc107'  # Amarillo/Naranja - Moderadamente seco
+                    estado = 'Moderadamente seco'
+                else:
+                    color = '#dc3545'  # Rojo - Muy seco
+                    estado = 'Muy seco'
+                
+                # Agregar segmento de línea
+                fig.add_trace(go.Scatter(
+                    x=merged_data['Date'].iloc[i:i+2],
+                    y=merged_data['Value_hist'].iloc[i:i+2],
+                    mode='lines',
+                    name='Media Histórica' if i == 0 else None,  # Solo mostrar leyenda una vez
+                    showlegend=(i == 0),
+                    line=dict(width=3, color=color, dash='dash'),
+                    hovertemplate=f'<b>Fecha:</b> %{{x}}<br><b>Media Histórica:</b> %{{y:.2f}} GWh<br><b>Estado:</b> {estado} ({porcentaje:.1f}%)<extra></extra>',
+                    legendgroup='media_historica'
+                ))
+        else:
+            # Fallback: línea azul simple si no hay datos para comparar
+            fig.add_trace(go.Scatter(
+                x=media_hist_totals['Date'],
+                y=media_hist_totals['Value'],
+                mode='lines',
+                name='Media Histórica',
+                line=dict(width=3, color='#1e90ff', dash='dash'),
+                hovertemplate='<b>Fecha:</b> %{x}<br><b>Media Histórica:</b> %{y:.2f} GWh<extra></extra>'
+            ))
     
     # Determinar título dinámico según filtros
     if rio_filter:
@@ -4929,13 +4973,13 @@ def create_total_timeline_chart(data, metric_name, region_filter=None, rio_filte
             html.Div([
                 html.P([
                     "📊 ", html.Strong("Línea negra:"), " Aportes reales del período seleccionado. ",
-                    "📈 ", html.Strong("Línea azul punteada:"), " Media histórica (promedio de todos los años para ese mes). "
                 ], className="mb-1 text-muted", style={"fontSize": "0.85rem"}),
                 html.P([
-                    html.Strong("Cómo interpretar: "), 
-                    "Si la línea negra está ", html.Strong("por encima", style={"color": "#28a745"}), " de la azul = mes más húmedo. ",
-                    "Si está ", html.Strong("por debajo", style={"color": "#dc3545"}), " = mes más seco. ",
-                    "Si están ", html.Strong("cerca", style={"color": "#17a2b8"}), " = condiciones normales."
+                    "📈 ", html.Strong("Línea punteada coloreada:"), " Media histórica con color dinámico: ",
+                    html.Span("🟢 Verde", style={"color": "#28a745", "fontWeight": "bold"}), " = Húmedo (>100%), ",
+                    html.Span("🔵 Cyan", style={"color": "#17a2b8", "fontWeight": "bold"}), " = Normal (90-100%), ",
+                    html.Span("🟡 Amarillo", style={"color": "#ffc107", "fontWeight": "bold"}), " = Moderadamente seco (70-90%), ",
+                    html.Span("🔴 Rojo", style={"color": "#dc3545", "fontWeight": "bold"}), " = Muy seco (<70%)."
                 ], className="mb-2 text-muted", style={"fontSize": "0.85rem"}),
                 html.Small("💡 Haz clic en cualquier punto para ver detalles por región", className="text-muted fst-italic")
             ], className="mt-2")
