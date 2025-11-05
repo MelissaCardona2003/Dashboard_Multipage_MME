@@ -991,6 +991,37 @@ def crear_grafica_barras_apiladas():
             else:
                 return 'Otras'
         
+        # Obtener ListadoRecursos para mapear tipos
+        objetoAPI = get_objetoAPI()
+        if objetoAPI:
+            try:
+                recursos_df = objetoAPI.request_data("ListadoRecursos", "Sistema", fecha_inicio, fecha_fin)
+                if recursos_df is not None and not recursos_df.empty:
+                    codigo_tipo = {}
+                    for _, row in recursos_df.iterrows():
+                        codigo = str(row.get('Values_Code', ''))
+                        tipo = str(row.get('Values_Type', 'TERMICA')).upper()
+                        if codigo:
+                            codigo_tipo[codigo.upper()] = tipo
+                    
+                    codigo_col = None
+                    for col in ['Values_code', 'Values_Code', 'Code']:
+                        if col in df_gene.columns:
+                            codigo_col = col
+                            break
+                    
+                    if codigo_col:
+                        df_gene['Tipo'] = df_gene[codigo_col].astype(str).str.upper().map(codigo_tipo).fillna('TERMICA')
+                    else:
+                        df_gene['Tipo'] = 'TERMICA'
+                else:
+                    df_gene['Tipo'] = 'TERMICA'
+            except Exception as e:
+                print(f"Error obteniendo ListadoRecursos: {e}")
+                df_gene['Tipo'] = 'TERMICA'
+        else:
+            df_gene['Tipo'] = 'TERMICA'
+        
         df_gene['Fuente'] = df_gene['Tipo'].apply(categorizar_fuente_xm)
         
         # Agrupar por fecha y fuente
