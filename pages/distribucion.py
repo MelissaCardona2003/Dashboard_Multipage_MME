@@ -15,6 +15,7 @@ register_page(
 
 # Definir las subsecciones de distribución
 DISTRIBUCION_SUBSECTIONS = [
+    {"name": "Demanda por Agente", "path": "/distribucion/demanda", "icon": "fas fa-bolt", "color": "#1976D2", "description": "Análisis de demanda comercial y real"},
     {"name": "Red de Distribución", "path": "/distribucion-red", "icon": "fas fa-sitemap", "color": "#3F51B5", "description": "Redes locales de distribución"},
     {"name": "Transformadores", "path": "/distribucion-transformadores", "icon": "fas fa-bolt", "color": "#3949AB", "description": "Infraestructura de transformación"},
     {"name": "Calidad del Servicio", "path": "/distribucion-calidad", "icon": "fas fa-chart-line", "color": "#303F9F", "description": "Indicadores de calidad"}
