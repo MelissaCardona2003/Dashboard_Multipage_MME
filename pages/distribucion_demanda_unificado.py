@@ -5,6 +5,7 @@ def get_plotly_modules():
     import plotly.graph_objects as go
     return px, go
 
+import dash
 from dash import dcc, html, Input, Output, State, callback, register_page, dash_table
 from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
@@ -498,7 +499,19 @@ def layout(**kwargs):
             
             # Store para guardar datos
             dcc.Store(id='store-datos-distribucion'),
-            dcc.Store(id='store-agentes-distribucion', data=agentes_df.to_json(date_format='iso', orient='split') if not agentes_df.empty else None)
+            dcc.Store(id='store-agentes-distribucion', data=agentes_df.to_json(date_format='iso', orient='split') if not agentes_df.empty else None),
+            
+            # Modal para mostrar detalle al hacer click en la gráfica
+            dbc.Modal([
+                dbc.ModalHeader(dbc.ModalTitle(id="modal-title-demanda")),
+                dbc.ModalBody([
+                    html.P(id="modal-description-demanda", className="mb-3"),
+                    html.Div(id="modal-table-content-demanda")
+                ]),
+                dbc.ModalFooter(
+                    dbc.Button("Cerrar", id="close-modal-demanda", className="ms-auto", n_clicks=0)
+                )
+            ], id="modal-detalle-demanda", is_open=False, size="xl")
             
         ], fluid=True, className="py-4")
     ])
@@ -579,3 +592,227 @@ def actualizar_datos_distribucion(n_clicks, codigo_agente, fecha_inicio_str, fec
         )
         
         return fig_error, html.Div(f"Error: {str(e)[:200]}"), None
+
+@callback(
+    [Output('modal-detalle-demanda', 'is_open'),
+     Output('modal-table-content-demanda', 'children'),
+     Output('modal-title-demanda', 'children'),
+     Output('modal-description-demanda', 'children')],
+    [Input('grafica-lineas-demanda', 'clickData'),
+     Input('close-modal-demanda', 'n_clicks')],
+    [State('store-datos-distribucion', 'data'),
+     State('store-agentes-distribucion', 'data'),
+     State('modal-detalle-demanda', 'is_open')],
+    prevent_initial_call=True
+)
+def mostrar_detalle_por_agente(clickData, n_clicks_close, datos_store, agentes_json, is_open):
+    """
+    Callback para mostrar tabla detallada por agente al hacer click en un punto de la gráfica
+    
+    La tabla muestra:
+    - Agente (código y nombre)
+    - Demanda Comercial (GWh)
+    - Demanda Real (GWh)
+    - Participación (%)
+    - Diferencia (Real - Comercial) en GWh
+    """
+    
+    import dash
+    ctx = dash.callback_context
+    
+    if not ctx.triggered:
+        raise PreventUpdate
+    
+    trigger_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    # Si se cerró el modal
+    if trigger_id == 'close-modal-demanda':
+        return False, None, "", ""
+    
+    # Si se hizo click en la gráfica
+    if trigger_id == 'grafica-lineas-demanda' and clickData:
+        try:
+            # Obtener datos del punto clickeado
+            point_data = clickData['points'][0]
+            fecha_seleccionada = point_data['x']
+            curve_number = point_data.get('curveNumber', 0)
+            
+            print(f"🎯 Click en gráfica - Fecha: {fecha_seleccionada}, Curva: {curve_number}")
+            
+            # Verificar que hay datos en el store
+            if not datos_store:
+                return False, html.Div("No hay datos disponibles"), "Sin datos", ""
+            
+            # Cargar datos del store
+            df_demanda_come = pd.read_json(StringIO(datos_store['demanda_come']), orient='split') if datos_store.get('demanda_come') else pd.DataFrame()
+            df_demanda_real = pd.read_json(StringIO(datos_store['demanda_real']), orient='split') if datos_store.get('demanda_real') else pd.DataFrame()
+            
+            if df_demanda_come.empty and df_demanda_real.empty:
+                return False, html.Div("No hay datos para esta fecha"), "Sin datos", ""
+            
+            # Convertir fecha seleccionada a datetime
+            fecha_dt = pd.to_datetime(fecha_seleccionada)
+            
+            # Filtrar datos por fecha
+            df_come_fecha = df_demanda_come[pd.to_datetime(df_demanda_come['Fecha']) == fecha_dt].copy() if not df_demanda_come.empty else pd.DataFrame()
+            df_real_fecha = df_demanda_real[pd.to_datetime(df_demanda_real['Fecha']) == fecha_dt].copy() if not df_demanda_real.empty else pd.DataFrame()
+            
+            print(f"📊 Datos filtrados - DemaCome: {len(df_come_fecha)}, DemaReal: {len(df_real_fecha)}")
+            
+            if df_come_fecha.empty and df_real_fecha.empty:
+                return False, html.Div("No hay datos para esta fecha"), "Sin datos", ""
+            
+            # Cargar listado de agentes para obtener nombres
+            agentes_df = pd.read_json(StringIO(agentes_json), orient='split') if agentes_json else pd.DataFrame()
+            
+            # Combinar datos de demanda comercial y real
+            if not df_come_fecha.empty:
+                df_combined = df_come_fecha.groupby('Codigo_Agente', as_index=False)['Demanda_GWh'].sum()
+                df_combined = df_combined.rename(columns={'Demanda_GWh': 'Demanda_Comercial_GWh'})
+            else:
+                df_combined = pd.DataFrame(columns=['Codigo_Agente', 'Demanda_Comercial_GWh'])
+            
+            if not df_real_fecha.empty:
+                df_real_agg = df_real_fecha.groupby('Codigo_Agente', as_index=False)['Demanda_GWh'].sum()
+                df_real_agg = df_real_agg.rename(columns={'Demanda_GWh': 'Demanda_Real_GWh'})
+                
+                if df_combined.empty:
+                    df_combined = df_real_agg
+                else:
+                    df_combined = df_combined.merge(df_real_agg, on='Codigo_Agente', how='outer')
+            
+            # Rellenar NaN con 0
+            df_combined['Demanda_Comercial_GWh'] = df_combined.get('Demanda_Comercial_GWh', 0).fillna(0)
+            df_combined['Demanda_Real_GWh'] = df_combined.get('Demanda_Real_GWh', 0).fillna(0)
+            
+            # Calcular diferencia
+            df_combined['Diferencia_GWh'] = df_combined['Demanda_Real_GWh'] - df_combined['Demanda_Comercial_GWh']
+            
+            # Calcular participación basada en demanda comercial (o real si no hay comercial)
+            total_comercial = df_combined['Demanda_Comercial_GWh'].sum()
+            total_real = df_combined['Demanda_Real_GWh'].sum()
+            
+            if total_comercial > 0:
+                df_combined['Participacion_%'] = (df_combined['Demanda_Comercial_GWh'] / total_comercial * 100).round(2)
+            elif total_real > 0:
+                df_combined['Participacion_%'] = (df_combined['Demanda_Real_GWh'] / total_real * 100).round(2)
+            else:
+                df_combined['Participacion_%'] = 0
+            
+            # Agregar nombres de agentes
+            if not agentes_df.empty:
+                agentes_nombres = agentes_df[['Values_Code', 'Values_Name']].drop_duplicates()
+                agentes_nombres = agentes_nombres.rename(columns={'Values_Code': 'Codigo_Agente', 'Values_Name': 'Nombre_Agente'})
+                df_combined = df_combined.merge(agentes_nombres, on='Codigo_Agente', how='left')
+                df_combined['Agente'] = df_combined['Codigo_Agente'] + ' - ' + df_combined['Nombre_Agente'].fillna('Desconocido')
+            else:
+                df_combined['Agente'] = df_combined['Codigo_Agente']
+            
+            # Ordenar por participación descendente
+            df_combined = df_combined.sort_values('Participacion_%', ascending=False)
+            
+            # Formatear para la tabla
+            df_tabla = df_combined[[
+                'Agente', 
+                'Demanda_Comercial_GWh', 
+                'Demanda_Real_GWh', 
+                'Participacion_%', 
+                'Diferencia_GWh'
+            ]].copy()
+            
+            # Formatear números
+            df_tabla['Demanda_Comercial_GWh'] = df_tabla['Demanda_Comercial_GWh'].apply(lambda x: f"{x:.4f}")
+            df_tabla['Demanda_Real_GWh'] = df_tabla['Demanda_Real_GWh'].apply(lambda x: f"{x:.4f}")
+            df_tabla['Diferencia_GWh'] = df_tabla['Diferencia_GWh'].apply(lambda x: f"{x:+.4f}")
+            df_tabla['Participacion_%'] = df_tabla['Participacion_%'].apply(lambda x: f"{x:.2f}%")
+            
+            # Renombrar columnas para display
+            df_tabla.columns = [
+                'Agente',
+                'Demanda Comercial (GWh)',
+                'Demanda Real (GWh)',
+                'Participación (%)',
+                'Diferencia (GWh)'
+            ]
+            
+            # Agregar fila de totales
+            total_row = {
+                'Agente': 'TOTAL',
+                'Demanda Comercial (GWh)': f"{total_comercial:.4f}",
+                'Demanda Real (GWh)': f"{total_real:.4f}",
+                'Participación (%)': '100.00%',
+                'Diferencia (GWh)': f"{total_real - total_comercial:+.4f}"
+            }
+            
+            data_with_total = df_tabla.to_dict('records') + [total_row]
+            
+            # Crear tabla
+            tabla = dash_table.DataTable(
+                data=data_with_total,
+                columns=[{"name": col, "id": col} for col in df_tabla.columns],
+                style_cell={
+                    'textAlign': 'left',
+                    'padding': '12px',
+                    'fontFamily': 'Arial, sans-serif',
+                    'fontSize': '14px',
+                    'whiteSpace': 'normal',
+                    'height': 'auto'
+                },
+                style_header={
+                    'backgroundColor': COLORS.get('primary', '#0d6efd'),
+                    'color': 'white',
+                    'fontWeight': 'bold',
+                    'textAlign': 'center'
+                },
+                style_data={
+                    'backgroundColor': '#f8f9fa'
+                },
+                style_data_conditional=[
+                    {
+                        'if': {'row_index': 'odd'},
+                        'backgroundColor': 'white'
+                    },
+                    {
+                        'if': {'filter_query': '{Agente} = "TOTAL"'},
+                        'backgroundColor': COLORS.get('primary', '#0d6efd'),
+                        'color': 'white',
+                        'fontWeight': 'bold'
+                    },
+                    {
+                        'if': {
+                            'filter_query': '{Diferencia (GWh)} contains "+"',
+                            'column_id': 'Diferencia (GWh)'
+                        },
+                        'color': COLORS.get('success', '#28a745')
+                    },
+                    {
+                        'if': {
+                            'filter_query': '{Diferencia (GWh)} contains "-"',
+                            'column_id': 'Diferencia (GWh)'
+                        },
+                        'color': COLORS.get('danger', '#dc3545')
+                    }
+                ],
+                page_size=15,
+                page_action='native',
+                sort_action='native',
+                filter_action='native',
+                export_format='xlsx',
+                export_headers='display'
+            )
+            
+            # Título y descripción
+            fecha_formateada = pd.to_datetime(fecha_seleccionada).strftime('%d/%m/%Y')
+            tipo_demanda = "Demanda Comercial" if curve_number == 0 else "Demanda Real"
+            
+            titulo = f"📊 Detalle por Agente - {fecha_formateada}"
+            descripcion = f"Detalle de demanda por agente para el día {fecha_formateada}. Se muestran {len(df_tabla)} agentes con sus respectivas demandas comercial y real, participación porcentual y la diferencia entre ambas."
+            
+            return True, tabla, titulo, descripcion
+            
+        except Exception as e:
+            print(f"❌ Error en mostrar_detalle_por_agente: {e}")
+            traceback.print_exc()
+            return False, html.Div(f"Error: {str(e)[:200]}"), "Error", ""
+    
+    raise PreventUpdate
