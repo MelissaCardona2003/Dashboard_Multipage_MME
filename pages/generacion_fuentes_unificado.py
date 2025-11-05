@@ -1600,7 +1600,7 @@ def cargar_grafica_barras_apiladas(_):
 @callback(
     [Output('grafica-torta-fuentes', 'figure'),
      Output('titulo-torta-fuentes', 'children')],
-    [Input('grafica-barras-apiladas', 'clickData')],
+    [Input('grafica-temporal-fuentes', 'clickData')],
     [State('store-datos-fuentes', 'data')],
     prevent_initial_call=True
 )
@@ -1609,12 +1609,18 @@ def actualizar_torta_por_click(clickData, stored_data):
     Actualiza el gráfico de torta cuando el usuario hace click en una barra del gráfico apilado.
     Muestra la composición por fuente para el día seleccionado.
     """
+    print("[DEBUG] Callback actualizar_torta_por_click ejecutado", flush=True)
+    print(f"[DEBUG] clickData: {clickData}", flush=True)
+    print(f"[DEBUG] stored_data keys: {stored_data.keys() if stored_data else 'None'}", flush=True)
+    
     if not clickData or not stored_data:
+        print("[ERROR] No hay clickData o stored_data", flush=True)
         raise PreventUpdate
     
     try:
         # Extraer la fecha del click
         fecha_click_str = clickData['points'][0]['x']
+        print(f"[DEBUG] Fecha seleccionada: {fecha_click_str}", flush=True)
         fecha_click = pd.to_datetime(fecha_click_str).date()
         
         # Recuperar datos del store
@@ -1623,16 +1629,22 @@ def actualizar_torta_por_click(clickData, stored_data):
         grouping_col = stored_data['grouping_col']
         tipo_fuente = stored_data['tipo_fuente']
         
+        print(f"[DEBUG] Datos recuperados: {len(df_por_fuente)} registros", flush=True)
+        print(f"[DEBUG] Grouping col: {grouping_col}, Tipo fuente: {tipo_fuente}", flush=True)
+        
         # Crear nuevo gráfico de torta para la fecha seleccionada
         nueva_figura = crear_grafica_torta_fuentes(df_por_fuente, fecha_click, grouping_col, tipo_fuente)
         
         # Actualizar título con la fecha seleccionada
         nuevo_titulo = f"Composición por Fuente - {fecha_click.strftime('%d/%m/%Y')}"
         
+        print(f"[DEBUG] Gráfico actualizado para {fecha_click}", flush=True)
         return nueva_figura, nuevo_titulo
         
     except Exception as e:
-        print(f"❌ Error en actualizar_torta_por_click: {e}")
+        print(f"[ERROR] Error en actualizar_torta_por_click: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
         raise PreventUpdate
 
 
