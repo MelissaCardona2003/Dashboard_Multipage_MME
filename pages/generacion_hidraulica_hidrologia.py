@@ -1828,19 +1828,19 @@ def update_content(n_clicks, rio, start_date, end_date, region):
             # Calcular porcentaje vs histórico para la ficha KPI
             porcentaje_vs_historico = None
             try:
-                # Agrupar datos reales por fecha y sumar (totales diarios)
+                # CORRECCIÓN: Sumar todos los aportes del período (acumulativo)
                 daily_totals_real = data.groupby('Date')['Value'].sum().reset_index()
-                promedio_real = daily_totals_real['Value'].mean()
+                total_real = daily_totals_real['Value'].sum()  # SUMA TOTAL, no promedio
                 
                 # Obtener media histórica y agrupar por fecha
                 media_hist_data = fetch_metric_data('AporEnerMediHist', 'Rio', start_date, end_date)
                 if media_hist_data is not None and not media_hist_data.empty:
                     # Agrupar media histórica por fecha y sumar
                     daily_totals_hist = media_hist_data.groupby('Date')['Value'].sum().reset_index()
-                    promedio_historico = daily_totals_hist['Value'].mean()
-                    if promedio_historico > 0:
-                        porcentaje_vs_historico = (promedio_real / promedio_historico) * 100
-                        logger.debug(f"Ficha KPI - Comparación: Real promedio={promedio_real:.2f} GWh vs Histórico={promedio_historico:.2f} GWh ({porcentaje_vs_historico:.1f}%)")
+                    total_historico = daily_totals_hist['Value'].sum()  # SUMA TOTAL, no promedio
+                    if total_historico > 0:
+                        porcentaje_vs_historico = (total_real / total_historico) * 100
+                        logger.debug(f"Ficha KPI - Comparación: Real total={total_real:.2f} GWh vs Histórico={total_historico:.2f} GWh ({porcentaje_vs_historico:.1f}%)")
             except Exception as e:
                 logger.warning(f"No se pudo calcular porcentaje vs histórico: {e}")
             
@@ -4905,15 +4905,15 @@ def create_total_timeline_chart(data, metric_name, region_filter=None, rio_filte
                 
                 logger.info(f"Media histórica agregada por fecha: {len(media_hist_totals)} días")
                 logger.debug(f"Valores agregados de muestra: {media_hist_totals['Value'].head(3).tolist()}")
-                logger.debug(f"Total agregado: min={media_hist_totals['Value'].min():.2f}, max={media_hist_totals['Value'].max():.2f}, promedio={media_hist_totals['Value'].mean():.2f} GWh")
+                logger.debug(f"Total agregado: min={media_hist_totals['Value'].min():.2f}, max={media_hist_totals['Value'].max():.2f}, suma={media_hist_totals['Value'].sum():.2f} GWh")
                 
-                # Calcular porcentaje comparativo
-                promedio_real = daily_totals['Value'].mean()
-                promedio_historico = media_hist_totals['Value'].mean()
+                # CORRECCIÓN: Calcular porcentaje con SUMA TOTAL del período (no promedio)
+                total_real = daily_totals['Value'].sum()  # SUMA TOTAL
+                total_historico = media_hist_totals['Value'].sum()  # SUMA TOTAL
                 
-                if promedio_historico > 0:
-                    porcentaje_vs_historico = (promedio_real / promedio_historico) * 100
-                    logger.debug(f"Comparación: Real promedio={promedio_real:.2f} GWh vs Histórico={promedio_historico:.2f} GWh ({porcentaje_vs_historico:.1f}%)")
+                if total_historico > 0:
+                    porcentaje_vs_historico = (total_real / total_historico) * 100
+                    logger.debug(f"Comparación: Real total={total_real:.2f} GWh vs Histórico={total_historico:.2f} GWh ({porcentaje_vs_historico:.1f}%)")
             else:
                 tiene_media = False
                 logger.warning(f"No hay datos después del filtrado")
