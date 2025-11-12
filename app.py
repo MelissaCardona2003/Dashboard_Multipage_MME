@@ -9,6 +9,51 @@ if sys.platform == 'win32':
 
 from dash import Dash, html, dcc
 import dash_bootstrap_components as dbc
+import logging
+import os
+from datetime import date, timedelta
+
+# Configurar logging ANTES de cualquier otra cosa
+from utils.logger import setup_logger, configure_root_logger
+
+# Configurar logger raíz
+configure_root_logger()
+
+# Logger para este módulo
+logger = setup_logger(__name__)
+
+# Reducir verbosidad de otros loggers
+logging.getLogger('werkzeug').setLevel(logging.WARNING)
+logging.getLogger('urllib3').setLevel(logging.WARNING)
+logging.getLogger('dash').setLevel(logging.INFO)
+
+# Banner de inicio
+logger.info("=" * 70)
+logger.info("🚀 INICIANDO PORTAL ENERGÉTICO MME")
+logger.info(f"Ambiente: {os.getenv('DASH_ENV', 'development')}")
+logger.info("=" * 70)
+
+# Limpiar cache corrupto al inicio (ANTES de crear la app)
+logger.info("🧹 Verificando integridad del cache...")
+try:
+    from utils.cache_manager import cleanup_corrupted_cache
+    cleanup_corrupted_cache()
+    logger.info("✅ Cache verificado correctamente")
+except Exception as e:
+    logger.warning(f"Error al limpiar cache: {e}")
+
+# ⚡ OPTIMIZACIÓN: Pre-cargar datos comunes para acelerar primera carga
+logger.info("⚡ Pre-cargando datos comunes...")
+try:
+    from utils._xm import get_objetoAPI
+    
+    objetoAPI = get_objetoAPI()
+    if objetoAPI:
+        logger.info("📊 API XM disponible - sistema de cache listo")
+    else:
+        logger.warning("⚠️ API XM no disponible - usando solo cache histórico")
+except Exception as e:
+    logger.warning(f"Error en pre-carga: {e}")
 
 # Crear la aplicación Dash con soporte multi-página
 app = Dash(
@@ -43,33 +88,36 @@ app.layout = html.Div([
 
 if __name__ == "__main__":
     import os
+    from dash import page_registry
+    
     port = int(os.environ.get('PORT', 8050))
-    print(f"🚀 Iniciando servidor Dash en puerto {port}...")
-    print("📍 La aplicación estará disponible en:")
-    print(f"   - http://localhost:{port}")
-    print(f"   - http://127.0.0.1:{port}")
+    
+    # Inicializar ReadDB ANTES de arrancar el servidor
+    logger.info("🔧 Inicializando conexión a API XM...")
+    from utils._xm import get_objetoAPI
+    api_xm = get_objetoAPI()
+    if api_xm:
+        logger.info("✅ API XM inicializada correctamente")
+    else:
+        logger.warning("⚠️ API XM no disponible - se usarán datos en caché")
+    
+    # Información de páginas registradas
+    logger.info(f"📄 Páginas registradas: {len(page_registry)}")
+    for path, page_info in page_registry.items():
+        logger.debug(f"  - {path}: {page_info.get('name', 'Sin nombre')}")
+    
+    logger.info("=" * 70)
+    logger.info(f"🚀 Iniciando servidor Dash en puerto {port}")
+    logger.info("📍 La aplicación estará disponible en:")
+    logger.info(f"   - http://localhost:{port}")
+    logger.info(f"   - http://127.0.0.1:{port}")
+    logger.info(f"   - http://192.168.1.34:{port}")
+    logger.info("=" * 70)
+    
     try:
         app.run(debug=False, host='0.0.0.0', port=port)
     except Exception as e:
-        print(f"❌ Error al iniciar servidor: {e}")
-        import traceback
-        traceback.print_exc()
-
-if __name__ == "__main__":
-    import os
-    port = int(os.environ.get('PORT', 8050))
-    print(f"🚀 Iniciando servidor Dash en puerto {port}...")
-    print("📍 La aplicación estará disponible en:")
-    print(f"   - http://localhost:{port}")
-    print(f"   - http://127.0.0.1:{port}")
-    print(f"   - http://192.168.1.34:{port}")
-    try:
-        app.run(debug=False, host='0.0.0.0', port=port)
-    except Exception as e:
-        print(f"❌ Error al iniciar servidor: {e}")
-        import traceback
-        traceback.print_exc()
-        input("Presiona Enter para cerrar...")
+        logger.critical(f"❌ Error al iniciar servidor: {e}", exc_info=True)
 
 # Exponer el servidor WSGI para Gunicorn
 server = app.server
