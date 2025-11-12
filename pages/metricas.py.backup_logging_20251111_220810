@@ -24,19 +24,13 @@ try:
     PYDATAXM_AVAILABLE = True
 except ImportError:
     PYDATAXM_AVAILABLE = False
-    # logger se configura después
+    print("⚠️ pydataxm no está disponible. Algunos datos pueden no cargarse correctamente.")
 
 # Imports locales para componentes uniformes
 from utils.components import crear_header, crear_navbar, crear_sidebar_universal, crear_boton_regresar
 from utils.config import COLORS
-from utils.logger import setup_logger
-from utils.validators import validate_date_range, validate_string
-from utils.exceptions import DateRangeError, InvalidParameterError, DataNotFoundError
 
 warnings.filterwarnings("ignore")
-
-# Configurar logger para este módulo
-logger = setup_logger(__name__)
 
 # =============================================================================
 # SISTEMA AUTOMÁTICO DE GENERACIÓN DE INFORMACIÓN DE MÉTRICAS
@@ -229,12 +223,12 @@ try:
     objetoAPI = get_objetoAPI()  # Obtener la API cuando se necesita
     if objetoAPI is not None:
         todas_las_metricas = objetoAPI.get_collections()
-        logger.info("API XM inicializada correctamente (lazy)")
-        logger.info(f"Métricas disponibles: {len(todas_las_metricas)}")
+        print("API XM inicializada correctamente (lazy)")
+        print(f"Métricas disponibles: {len(todas_las_metricas)}")
     else:
-        logger.warning("pydataxm no está disponible - usando datos mock")
+        print("pydataxm no está disponible - usando datos mock")
 except Exception as e:
-    logger.error(f"Error al inicializar API XM: {e}", exc_info=True)
+    print(f"Error al inicializar API XM: {e}")
     todas_las_metricas = pd.DataFrame()
 
 # Función para obtener opciones únicas de MetricId y Entity
@@ -244,7 +238,7 @@ def get_metric_options():
 # REMOVED DEBUG:     print(f"🔍 [DEBUG] objetoAPI disponible: {objetoAPI is not None}")
     
     if todas_las_metricas.empty or objetoAPI is None:
-        logger.warning("Retornando opciones vacías porque todas_las_metricas está vacío o objetoAPI es None")
+        print("⚠️ [DEBUG] Retornando opciones vacías porque todas_las_metricas está vacío o objetoAPI es None")
         return [], []
     
     # Crear opciones de métricas y ordenarlas alfabéticamente por MetricName
@@ -266,7 +260,7 @@ def get_metric_options():
     entity_options = sorted(entity_options, key=lambda x: x['label'])
     
 # REMOVED DEBUG:     print(f"📊 Opciones de métricas creadas para el dropdown: {len(metric_options)}")
-    logger.debug(f"Opciones de entidades disponibles: {len(entity_options)}")
+    print(f"🏢 Opciones de entidades disponibles: {len(entity_options)}")
     
     return metric_options, entity_options
 
@@ -751,52 +745,24 @@ def update_entity_options(selected_metric):
      dash.dependencies.State("date-picker-range", "end_date")]
 )
 def display_metric_results(n_clicks, selected_metric, selected_entity, start_date, end_date):
-    """
-    Callback principal para consultar y mostrar métricas XM.
+# REMOVED DEBUG:     print(f"🔍 [DEBUG] Callback ejecutado - n_clicks: {n_clicks}, metric: {selected_metric}, entity: {selected_entity}, dates: {start_date} to {end_date}")
+# REMOVED DEBUG:     print(f"🔍 [DEBUG] objetoAPI disponible: {objetoAPI is not None}, métricas cargadas: {len(todas_las_metricas)}")
     
-    Incluye validación de parámetros y manejo robusto de errores.
-    """
-    # Validaciones iniciales
     if not n_clicks or not selected_metric:
-        logger.debug("Callback terminado - falta métrica o no hay clicks")
-        return dbc.Alert(
-            "👆 Selecciona una métrica y haz clic en 'Consultar Datos Energéticos'", 
-            color="info", 
-            className="text-center"
-        )
+        print("⚠️ [DEBUG] Callback terminado - falta métrica o no hay clicks")
+        return dbc.Alert("👆 Selecciona una métrica y haz clic en 'Consultar Datos Energéticos'", color="info", className="text-center")
     
     if todas_las_metricas.empty or objetoAPI is None:
-        logger.warning("API XM no disponible o métricas no cargadas")
         return dbc.Alert([
             html.I(className="fas fa-exclamation-triangle me-2"),
             html.Strong("Servicio XM no disponible: "),
             "No se pudieron cargar las métricas de XM. Verifica la conexión a internet y que la librería pydataxm esté correctamente instalada."
         ], color="warning")
     
-    # Validar métrica seleccionada
-    try:
-        selected_metric = validate_string(
-            selected_metric, 
-            min_length=3, 
-            max_length=50,
-            name="métrica"
-        )
-    except InvalidParameterError as e:
-        logger.error(f"Métrica inválida: {e}")
-        return dbc.Alert([
-            html.I(className="fas fa-times-circle me-2"),
-            html.Strong("Métrica inválida: "),
-            str(e)
-        ], color="danger")
-    
     metric_data = todas_las_metricas[todas_las_metricas['MetricId'] == selected_metric]
     
     if metric_data.empty:
-        logger.warning(f"Métrica no encontrada: {selected_metric}")
-        return dbc.Alert(
-            f"Métrica '{selected_metric}' no encontrada en el sistema.", 
-            color="warning"
-        )
+        return dbc.Alert("Métrica no encontrada.", color="warning")
     
     # Información básica de la métrica
     metric_name = metric_data.iloc[0]['MetricName']
@@ -892,56 +858,6 @@ def display_metric_results(n_clicks, selected_metric, selected_entity, start_dat
     # Si hay entidad y fechas seleccionadas, intentar consultar datos
     if selected_entity and start_date and end_date:
         try:
-            # Validar entidad
-            try:
-                selected_entity = validate_string(
-                    selected_entity, 
-                    min_length=1, 
-                    max_length=100,
-                    name="entidad"
-                )
-            except InvalidParameterError as e:
-                logger.error(f"Entidad inválida: {e}")
-                return html.Div([
-                    info_card,
-                    dbc.Alert([
-                        html.I(className="fas fa-times-circle me-2"),
-                        html.Strong("Entidad inválida: "),
-                        str(e)
-                    ], color="danger", className="mt-3")
-                ])
-            
-            # Validar rango de fechas
-            try:
-                # Obtener max_days de la métrica
-                max_days_allowed = metric_data.iloc[0].get('MaxDays', 365)
-                if max_days_allowed == 'N/A':
-                    max_days_allowed = 365
-                
-                start_validated, end_validated = validate_date_range(
-                    start_date, 
-                    end_date, 
-                    max_days=int(max_days_allowed)
-                )
-                logger.info(f"Fechas validadas", extra={
-                    'inicio': start_validated,
-                    'fin': end_validated,
-                    'metrica': selected_metric,
-                    'entidad': selected_entity
-                })
-            except DateRangeError as e:
-                logger.error(f"Error en rango de fechas: {e}", extra=e.details if hasattr(e, 'details') else {})
-                return html.Div([
-                    info_card,
-                    dbc.Alert([
-                        html.I(className="fas fa-calendar-times me-2"),
-                        html.Strong("Error en fechas: "),
-                        str(e),
-                        html.Hr(),
-                        html.Small(f"💡 Consejo: Esta métrica permite un máximo de {max_days_allowed} días. Reduce el rango de fechas.")
-                    ], color="danger", className="mt-3")
-                ])
-            
             # Verificar que la API esté disponible
             if objetoAPI is None:
                 api_error_alert = dbc.Alert([
@@ -952,43 +868,19 @@ def display_metric_results(n_clicks, selected_metric, selected_entity, start_dat
                 ], color="danger", className="mt-3")
                 return html.Div([info_card, api_error_alert])
             
-            # Convertir fechas validadas
-            start_dt = dt.datetime.strptime(start_validated, "%Y-%m-%d").date()
-            end_dt = dt.datetime.strptime(end_validated, "%Y-%m-%d").date()
+            # Convertir fechas
+            start_dt = dt.datetime.strptime(start_date, "%Y-%m-%d").date()
+            end_dt = dt.datetime.strptime(end_date, "%Y-%m-%d").date()
             
             # Realizar consulta a la API
-            logger.info(f"Iniciando consulta API XM", extra={
-                'metrica': selected_metric,
-                'entidad': selected_entity,
-                'fecha_inicio': start_dt,
-                'fecha_fin': end_dt
-            })
+# REMOVED DEBUG:             print(f"🔍 [DEBUG] Iniciando consulta API XM")
+# REMOVED DEBUG:             print(f"🔍 [DEBUG] Parámetros: metric={selected_metric}, entity={selected_entity}, start={start_dt}, end={end_dt}")
+# REMOVED DEBUG:             print(f"🔍 [DEBUG] Objeto API: {type(objetoAPI)}")
             
-            try:
-                data = objetoAPI.request_data(selected_metric, selected_entity, start_dt, end_dt)
-            except Exception as api_error:
-                logger.error(f"Error en consulta API XM", extra={
-                    'error': str(api_error),
-                    'metrica': selected_metric,
-                    'entidad': selected_entity
-                })
-                return html.Div([
-                    info_card,
-                    dbc.Alert([
-                        html.I(className="fas fa-exclamation-triangle me-2"),
-                        html.Strong("Error consultando API XM: "),
-                        str(api_error),
-                        html.Hr(),
-                        html.Small("💡 Verifica la conexión a internet y que los parámetros sean correctos.")
-                    ], color="danger", className="mt-3")
-                ])
+            data = objetoAPI.request_data(selected_metric, selected_entity, start_dt, end_dt)
+# REMOVED DEBUG:             print(f"🔍 [DEBUG] Respuesta API: type={type(data)}, empty={data is None or (hasattr(data, 'empty') and data.empty)}")
             
             if data is not None and not data.empty:
-                logger.info(f"Datos obtenidos exitosamente", extra={
-                    'registros': len(data),
-                    'columnas': list(data.columns),
-                    'metrica': selected_metric
-                })
 # REMOVED DEBUG:                 print(f"✅ Datos obtenidos: {len(data)} registros")
                 
                 # Crear explicación de las columnas de la tabla
@@ -1077,61 +969,28 @@ def display_metric_results(n_clicks, selected_metric, selected_entity, start_dat
                 
                 return html.Div([info_card, columnas_info, data_table])
             else:
-                logger.warning("No se encontraron datos en la consulta", extra={
-                    'metrica': selected_metric,
-                    'entidad': selected_entity,
-                    'fecha_inicio': start_dt,
-                    'fecha_fin': end_dt
-                })
-                no_data_alert = dbc.Alert([
-                    html.I(className="fas fa-inbox me-2"),
-                    html.Strong("No se encontraron datos"),
-                    html.Hr(),
-                    html.P([
-                        "No hay registros disponibles para los parámetros seleccionados:",
-                        html.Ul([
-                            html.Li(f"Métrica: {selected_metric}"),
-                            html.Li(f"Entidad: {selected_entity}"),
-                            html.Li(f"Período: {start_dt} - {end_dt}")
-                        ])
-                    ]),
-                    html.Small([
-                        html.Strong("💡 Sugerencias:"),
-                        html.Br(),
-                        "• Intenta con un rango de fechas más amplio",
-                        html.Br(),
-                        "• Verifica que la entidad tenga datos para esta métrica",
-                        html.Br(),
-                        "• Consulta fechas más recientes (algunos datos históricos pueden no estar disponibles)"
-                    ])
-                ], color="warning", className="mt-3")
+                print("⚠️ [DEBUG] No se encontraron datos en la consulta")
+# REMOVED DEBUG:                 print(f"⚠️ [DEBUG] Data returned: {data}")
+                if hasattr(data, 'shape'):
+# REMOVED DEBUG:                     print(f"⚠️ [DEBUG] Data shape: {data.shape}")
+                    pass  # El shape ya fue verificado
+                no_data_alert = dbc.Alert(
+                    "No se encontraron datos para los parámetros seleccionados. Intenta con un rango de fechas más amplio o una métrica diferente.",
+                    color="warning",
+                    className="mt-3"
+                )
                 return html.Div([info_card, no_data_alert])
                 
-        except (DateRangeError, InvalidParameterError) as validation_error:
-            # Errores de validación ya fueron manejados arriba
-            logger.error(f"Error de validación: {validation_error}")
-            raise
         except Exception as e:
-            logger.error(f"Error inesperado en consulta de datos", extra={
-                'error': str(e),
-                'tipo_error': type(e).__name__,
-                'metrica': selected_metric,
-                'entidad': selected_entity
-            }, exc_info=True)
-            
-            error_alert = dbc.Alert([
-                html.I(className="fas fa-bug me-2"),
-                html.Strong("Error inesperado: "),
-                str(e),
-                html.Hr(),
-                html.Small([
-                    html.Strong("ℹ️ Información técnica:"),
-                    html.Br(),
-                    f"Tipo de error: {type(e).__name__}",
-                    html.Br(),
-                    "Este error ha sido registrado en los logs del sistema."
-                ])
-            ], color="danger", className="mt-3")
+# REMOVED DEBUG:             print(f"❌ [DEBUG] Error en la consulta: {str(e)}")
+# REMOVED DEBUG:             print(f"❌ [DEBUG] Error type: {type(e)}")
+            import traceback
+# REMOVED DEBUG:             print(f"❌ [DEBUG] Traceback: {traceback.format_exc()}")
+            error_alert = dbc.Alert(
+                f"Error al consultar los datos: {str(e)}",
+                color="danger",
+                className="mt-3"
+            )
             return html.Div([info_card, error_alert])
     
     return info_card
@@ -1161,9 +1020,8 @@ def obtener_datos_reporte():
         })
         
         return df_metricas if not df_metricas.empty else None
-    except Exception as e:
-        logger.error(f"Error creando tabla de métricas: {e}", exc_info=True)
-        return None
+    except:
+        pass
     
     # Si no hay datos reales, retornar None
     return None

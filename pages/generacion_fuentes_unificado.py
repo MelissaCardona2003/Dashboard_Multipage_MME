@@ -1793,46 +1793,53 @@ def actualizar_tablero_fuentes(tipo_fuente, fecha_inicio, fecha_fin, n_clicks, n
                 html.Strong(f"Tipo de Fuente: {titulo_tipo}")
             ], color="light", className="mb-3"),
             
-            # Gráfica temporal
-            dbc.Card([
-                dbc.CardHeader([
-                    html.H5([
-                        html.I(className="fas fa-chart-line me-2"),
-                        f"Evolución Temporal - Generación {titulo_tipo}"
-                    ], className="mb-0")
-                ]),
-                dbc.CardBody([
-                    dcc.Graph(
-                        id='grafica-temporal-fuentes',
-                        figure=crear_grafica_temporal_negra(df_generacion, planta_nombre, tipo_fuente),
-                        config={'displayModeBar': True}
-                    )
-                ])
-            ], className="mb-4"),
-            
-            # Gráfica de torta interactiva (separada)
-            dbc.Card([
-                dbc.CardHeader([
-                    html.H5([
-                        html.I(className="fas fa-chart-pie me-2"),
-                        html.Span("Composición por Fuente", id='titulo-torta-fuentes'),
-                        html.Small(" (Haz clic en las barras para actualizar)", className="text-muted ms-2")
-                    ], className="mb-0")
-                ]),
-                dbc.CardBody([
-                    dcc.Graph(
-                        id='grafica-torta-fuentes',
-                        figure=crear_grafica_torta_fuentes(df_por_fuente, ultima_fecha, grouping_col, tipo_fuente),
-                        config={'displayModeBar': True}
-                    ),
-                    # Store para guardar los datos necesarios para el callback
-                    dcc.Store(id='store-datos-fuentes', data={
-                        'df_por_fuente': df_por_fuente.to_json(date_format='iso', orient='split'),
-                        'grouping_col': grouping_col,
-                        'tipo_fuente': tipo_fuente,
-                        'ultima_fecha': ultima_fecha.isoformat()
-                    })
-                ])
+            # Gráficas lado a lado: Temporal (izquierda) y Torta (derecha)
+            dbc.Row([
+                # Columna izquierda: Gráfica temporal (70% ancho)
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardHeader([
+                            html.H5([
+                                html.I(className="fas fa-chart-line me-2"),
+                                f"Evolución Temporal - Generación {titulo_tipo}"
+                            ], className="mb-0")
+                        ]),
+                        dbc.CardBody([
+                            dcc.Graph(
+                                id='grafica-temporal-fuentes',
+                                figure=crear_grafica_temporal_negra(df_generacion, planta_nombre, tipo_fuente),
+                                config={'displayModeBar': True}
+                            )
+                        ])
+                    ])
+                ], width=8, className="mb-4"),
+                
+                # Columna derecha: Gráfica de torta interactiva (30% ancho)
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardHeader([
+                            html.H5([
+                                html.I(className="fas fa-chart-pie me-2"),
+                                html.Span("Composición", id='titulo-torta-fuentes'),
+                            ], className="mb-0 text-center"),
+                            html.Small("Haz clic en las barras →", className="text-muted d-block text-center mt-1")
+                        ]),
+                        dbc.CardBody([
+                            dcc.Graph(
+                                id='grafica-torta-fuentes',
+                                figure=crear_grafica_torta_fuentes(df_por_fuente, ultima_fecha, grouping_col, tipo_fuente),
+                                config={'displayModeBar': True}
+                            ),
+                            # Store para guardar los datos necesarios para el callback
+                            dcc.Store(id='store-datos-fuentes', data={
+                                'df_por_fuente': df_por_fuente.to_json(date_format='iso', orient='split'),
+                                'grouping_col': grouping_col,
+                                'tipo_fuente': tipo_fuente,
+                                'ultima_fecha': ultima_fecha.isoformat()
+                            })
+                        ])
+                    ])
+                ], width=4, className="mb-4")
             ], className="mb-4"),
             
             # Tabla de participación

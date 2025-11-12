@@ -17,16 +17,30 @@ def chunk_date_ranges(start: date, end: date, chunk_days: int = 30) -> List[Tupl
 		cur = seg_end + timedelta(days=1)
 	return ranges
 
-def fetch_gene_recurso_chunked(objetoAPI, start: date, end: date, filtros: Iterable[str], batch_size: int = 50, chunk_days: int = 30, retries: int = 2, backoff_sec: float = 0.8) -> pd.DataFrame:
+def fetch_gene_recurso_chunked(objetoAPI, start: date, end: date, filtros: Iterable[str], batch_size: int = 50, chunk_days: int = 180, retries: int = 2, backoff_sec: float = 0.8) -> pd.DataFrame:
 	"""Consulta Gene con Entity='Recurso' para una lista de filtros (SIC) en lotes y por chunks de fechas.
 	Devuelve DataFrame con columnas: ['Codigo','Fecha','Generacion_GWh'] agregadas por día.
-	ACTUALIZADO: Usa fetch_metric_data con cache histórico en lugar de API directa.
+	OPTIMIZADO: Usa cache manager para evitar consultas repetidas a API.
+	MEJORA DE PERFORMANCE: chunk_days aumentado de 90 a 180 días para reducir overhead.
 	"""
 	from utils._xm import fetch_metric_data
+	from utils.cache_manager import get_cache_key, get_from_cache, save_to_cache
+	import logging
+	logger = logging.getLogger(__name__)
+	
 	filtros = [str(x).strip() for x in filtros if x and isinstance(x, (str, int))]
 	if not filtros:
 		return pd.DataFrame(columns=['Codigo','Fecha','Generacion_GWh'])
 
+	# OPTIMIZACIÓN: Cachear resultado completo de consulta
+	filtros_hash = hash(tuple(sorted(filtros)))
+	cache_key = get_cache_key('gene_recurso_chunked', filtros_hash, start, end)
+	cached_data = get_from_cache(cache_key, allow_expired=False)
+	if cached_data is not None:
+		logger.info(f"✅ Cache válido para Gene/Recurso ({len(filtros)} códigos, {start} a {end})")
+		return cached_data
+
+	# MEJORA: chunk_days por defecto 180 (era 90) - menos llamadas API
 	registros = []
 	for ini, fin in chunk_date_ranges(start, end, chunk_days=chunk_days):
 		# Batches por códigos SIC
@@ -58,6 +72,7 @@ def fetch_gene_recurso_chunked(objetoAPI, start: date, end: date, filtros: Itera
 
 	if not registros:
 		return pd.DataFrame(columns=['Codigo','Fecha','Generacion_GWh'])
+	
 	df_out = pd.DataFrame(registros)
 	# Asegurar tipos/orden básico
 	if 'Fecha' in df_out.columns:
@@ -65,5 +80,10 @@ def fetch_gene_recurso_chunked(objetoAPI, start: date, end: date, filtros: Itera
 			df_out['Fecha'] = pd.to_datetime(df_out['Fecha']).dt.date
 		except Exception:
 			pass
+	
+	# Cachear resultado por 6 horas (datos de generación actualizados diariamente)
+	save_to_cache(cache_key, df_out, cache_type='gene_recurso')
+	logger.info(f"✅ Cacheado Gene/Recurso: {len(df_out)} registros ({len(filtros)} códigos)")
+	
 	return df_out
 
