@@ -155,11 +155,13 @@ def _detectar_columna_sic(recursos_df: pd.DataFrame, f_ini: date, f_fin: date):
 # Caché manual para obtener_generacion_plantas (usa fechas Y plantas como key)
 _cache_generacion = {}
 
-def obtener_generacion_plantas(fecha_inicio, fecha_fin, plantas_df=None):
+def obtener_generacion_plantas(fecha_inicio, fecha_fin, plantas_df=None, tipo_fuente='TODAS'):
     """Obtener datos de generación por plantas
     
     IMPORTANTE: Implementa caché manual basado en fechas Y plantas para mejorar performance
     Cache key incluye identificador único de las plantas para evitar conflictos entre tipos de fuente
+    
+    OPTIMIZACIÓN v2: Usa hash MD5 completo de todos los códigos + tipo_fuente para cache robusto
     """
     try:
         objetoAPI = get_objetoAPI()
@@ -179,14 +181,15 @@ def obtener_generacion_plantas(fecha_inicio, fecha_fin, plantas_df=None):
         if not codigos:
             return pd.DataFrame(), pd.DataFrame()
         
-        # Crear key de caché usando fechas y hash de códigos de plantas
-        # Usamos los primeros 3 códigos ordenados como identificador único
-        plantas_id = '_'.join(sorted(codigos)[:3]) if len(codigos) <= 3 else '_'.join(sorted(codigos)[:3]) + f'_{len(codigos)}'
-        cache_key = f"{fecha_inicio}_{fecha_fin}_{plantas_id}"
+        # OPTIMIZACIÓN: Hash MD5 completo de TODOS los códigos (no solo 3)
+        # Incluye tipo_fuente para evitar colisiones entre diferentes tipos
+        codigos_str = '|'.join(sorted(codigos))
+        plantas_hash = hashlib.md5(codigos_str.encode()).hexdigest()[:12]
+        cache_key = f"gen_plantas_{fecha_inicio}_{fecha_fin}_{plantas_hash}_{tipo_fuente}"
         
         # Si está en caché, retornar directamente
         if cache_key in _cache_generacion:
-            print(f"⚡ Usando datos en caché para {fecha_inicio} a {fecha_fin} ({len(codigos)} plantas)")
+            logger.info(f"⚡ Cache HIT: {tipo_fuente} - {fecha_inicio} a {fecha_fin} ({len(codigos)} plantas)")
             return _cache_generacion[cache_key]
         
         df_generacion = fetch_gene_recurso_chunked(objetoAPI, fecha_inicio, fecha_fin, codigos,
@@ -230,7 +233,7 @@ def obtener_generacion_plantas(fecha_inicio, fecha_fin, plantas_df=None):
         # Guardar en caché antes de retornar
         resultado = (df_generacion, participacion_total)
         _cache_generacion[cache_key] = resultado
-        print(f"💾 Datos guardados en caché para {fecha_inicio} a {fecha_fin} ({len(codigos)} plantas)")
+        logger.info(f"💾 Cache SAVED: {tipo_fuente} - {fecha_inicio} a {fecha_fin} ({len(codigos)} plantas)")
         
         return resultado
     except Exception as e:
@@ -290,9 +293,9 @@ def crear_grafica_temporal_negra(df_generacion, planta_seleccionada=None, tipo_f
     # Agrupar por fecha y calcular totales
     df_por_fecha = df_generacion.groupby('Fecha', as_index=False)['Generacion_GWh'].sum().sort_values('Fecha')
 
-    # Si el usuario seleccionó un tipo específico, mostrar análisis por Planta;
-    # si seleccionó 'TODAS' o no especificó, mantener agrupación por Tipo
-    grouping_col = 'Tipo' if (not tipo_fuente or str(tipo_fuente).upper() == 'TODAS') else 'Planta'
+    # Determinar columna de agrupación
+    # Siempre agrupar por 'Tipo' para mostrar fuentes en barras apiladas
+    grouping_col = 'Tipo'
 
     df_por_fuente = df_generacion.groupby(['Fecha', grouping_col], as_index=False)['Generacion_GWh'].sum().sort_values('Fecha')
 
@@ -318,15 +321,8 @@ def crear_grafica_temporal_negra(df_generacion, planta_seleccionada=None, tipo_f
         vertical_spacing=0.12
     )
 
-    # Preparar paleta de colores
-    if grouping_col == 'Tipo':
-        colores_categoria = colores_fuente
-    else:
-        try:
-            palette = px.colors.qualitative.Plotly
-        except Exception:
-            palette = ['#636EFA', '#EF553B', '#00CC96', '#AB63FA', '#FFA15A', '#19D3F3', '#FF6692']
-        colores_categoria = {cat: palette[i % len(palette)] for i, cat in enumerate(tipos_ordenados)}
+    # Preparar paleta de colores - siempre usar colores predefinidos para tipos de fuente
+    colores_categoria = colores_fuente
 
     # --- GRÁFICA 1: BARRAS APILADAS (GWh) ---
     for cat in tipos_ordenados:
@@ -397,7 +393,7 @@ def crear_grafica_temporal_negra(df_generacion, planta_seleccionada=None, tipo_f
         height=700,
         hovermode='x unified',
         template='plotly_white',
-        barmode='stack',
+        barmode='stack',  # Siempre barras apiladas
         legend=dict(
             orientation="h",
             yanchor="bottom",
@@ -1531,20 +1527,24 @@ def layout():
             dbc.CardBody([
                 dbc.Row([
                     dbc.Col([
-                        html.Label("Tipo de Fuente:", className="fw-bold"),
+                        html.Label("Fuentes a Comparar (Multi-selección):", className="fw-bold"),
                         dcc.Dropdown(
                             id='tipo-fuente-dropdown',
                             options=[
-                                {'label': 'Todas las Fuentes', 'value': 'TODAS'},
                                 {'label': '💧 Hidráulica', 'value': 'HIDRAULICA'},
                                 {'label': '🔥 Térmica', 'value': 'TERMICA'},
                                 {'label': '💨 Eólica', 'value': 'EOLICA'},
                                 {'label': '☀️ Solar', 'value': 'SOLAR'},
                                 {'label': '🌿 Biomasa/Cogeneración', 'value': 'BIOMASA'},
                             ],
-                            value='TODAS',
-                            clearable=False,
+                            value=['HIDRAULICA', 'TERMICA', 'EOLICA', 'SOLAR', 'BIOMASA'],  # Por defecto: TODAS
+                            multi=True,  # MULTI-SELECCIÓN ACTIVADA
+                            placeholder="Selecciona una o más fuentes...",
                             style={'width': '100%'}
+                        ),
+                        html.Small(
+                            "💡 Selecciona/deselecciona fuentes para filtrar las barras apiladas",
+                            className="text-muted d-block mt-1"
                         )
                     ], md=3),
                     dbc.Col([
@@ -1557,8 +1557,8 @@ def layout():
                             style={'width': '100%'}
                         ),
                         html.Small([
-                            "⚡ Por defecto: 30 días | ",
-                            html.Span("Períodos largos se agrupan automáticamente", style={'color': '#28a745'})
+                            "⚡ Recomendado: 30-90 días | ",
+                            html.Span("Rangos >6 meses pueden tardar 30-60s", style={'color': '#ff6b6b', 'fontWeight': '500'})
                         ], className="text-muted d-block mt-1")
                     ], md=4),
                     dbc.Col([
@@ -1709,26 +1709,78 @@ def cargar_tabla_resumen(_):
     [State('planta-dropdown-fuentes', 'value')],
     prevent_initial_call=False  # SE EJECUTA AL CARGAR LA PÁGINA
 )
-def actualizar_tablero_fuentes(tipo_fuente, fecha_inicio, fecha_fin, n_clicks, n_intervals, planta_seleccionada):
-    if not fecha_inicio or not fecha_fin or not tipo_fuente:
-        return [], dbc.Alert("Selecciona un tipo de fuente y rango de fechas válido", color="info")
+def actualizar_tablero_fuentes(tipos_fuente, fecha_inicio, fecha_fin, n_clicks, n_intervals, planta_seleccionada):
+    # Validar que tipos_fuente sea una lista
+    if not tipos_fuente:
+        return [], dbc.Alert("Selecciona al menos una fuente de energía", color="info")
+    
+    # Si es string, convertir a lista
+    if isinstance(tipos_fuente, str):
+        tipos_fuente = [tipos_fuente]
+    
+    if not fecha_inicio or not fecha_fin:
+        return [], dbc.Alert("Selecciona un rango de fechas válido", color="info")
     
     try:
         # Convertir fechas
         fecha_inicio_dt = datetime.strptime(fecha_inicio, "%Y-%m-%d").date()
         fecha_fin_dt = datetime.strptime(fecha_fin, "%Y-%m-%d").date()
         
-        # Obtener listado de plantas del tipo seleccionado
-        plantas_df = obtener_listado_recursos(tipo_fuente)
+        # Informar sobre rango grande
+        total_days = (fecha_fin_dt - fecha_inicio_dt).days
+        if total_days > 180:
+            logger.info(f"⚠️ Rango grande detectado: {total_days} días - Esto puede tardar ~30-60s")
         
-        if plantas_df.empty:
-            tipo_label = TIPOS_FUENTE[tipo_fuente]['label'].lower() if tipo_fuente in TIPOS_FUENTE else "todas las fuentes"
+        logger.info(f"📊 Cargando datos para fuentes: {', '.join(tipos_fuente)}")
+        
+        # SIEMPRE obtener datos de TODAS las fuentes para las fichas
+        todas_fuentes = ['HIDRAULICA', 'TERMICA', 'EOLICA', 'SOLAR', 'BIOMASA']
+        todas_plantas_df = pd.DataFrame()
+        df_generacion_completo = pd.DataFrame()  # Para las fichas
+        df_participacion_completo = pd.DataFrame()  # Para las fichas
+        
+        for fuente in todas_fuentes:
+            # Obtener listado de plantas de cada fuente
+            plantas_df_fuente = obtener_listado_recursos(fuente)
+            
+            if plantas_df_fuente.empty:
+                logger.warning(f"⚠️ No se encontraron plantas para {fuente}")
+                continue
+            
+            todas_plantas_df = pd.concat([todas_plantas_df, plantas_df_fuente], ignore_index=True)
+            
+            # Obtener datos de generación
+            df_gen, df_part = obtener_generacion_plantas(
+                fecha_inicio_dt, fecha_fin_dt, plantas_df_fuente, tipo_fuente=fuente
+            )
+            
+            if not df_gen.empty:
+                df_participacion_completo = pd.concat([df_participacion_completo, df_part], ignore_index=True)
+                df_generacion_completo = pd.concat([df_generacion_completo, df_gen], ignore_index=True)
+        
+        # Validar que se obtuvieron datos
+        if df_generacion_completo.empty:
             return [], dbc.Alert(
-                f"No se pudieron obtener datos de plantas {tipo_label}",
+                "No se encontraron datos de generación para el período seleccionado",
+                color="info"
+            )
+        
+        # FILTRAR solo las fuentes seleccionadas para las gráficas
+        # Convertir códigos a labels
+        labels_seleccionadas = [TIPOS_FUENTE.get(tf, {}).get('label', tf) for tf in tipos_fuente]
+        df_generacion = df_generacion_completo[df_generacion_completo['Tipo'].isin(labels_seleccionadas)].copy()
+        
+        if df_generacion.empty:
+            return [], dbc.Alert(
+                "No se encontraron datos para las fuentes seleccionadas",
                 color="warning"
             )
         
-        # Opciones para el dropdown
+        # Las fichas usan TODOS los datos (sin filtrar)
+        df_participacion = df_participacion_completo
+        plantas_df = todas_plantas_df
+        
+        # Opciones para el dropdown (todas las plantas)
         col_sic = _detectar_columna_sic(plantas_df, fecha_inicio_dt, fecha_fin_dt)
         opciones_plantas = []
         if col_sic:
@@ -1736,17 +1788,6 @@ def actualizar_tablero_fuentes(tipo_fuente, fecha_inicio, fecha_fin, n_clicks, n
                 {'label': f"{row['Values_Name']}", 'value': row[col_sic]}
                 for _, row in plantas_df.iterrows() if pd.notna(row.get(col_sic))
             ]
-        
-        # Obtener datos de generación
-        df_generacion, df_participacion = obtener_generacion_plantas(
-            fecha_inicio_dt, fecha_fin_dt, plantas_df
-        )
-        
-        if df_generacion.empty:
-            return opciones_plantas, dbc.Alert(
-                "No se encontraron datos de generación para el período seleccionado",
-                color="info"
-            )
         
         # Determinar planta seleccionada
         planta_nombre = None
@@ -1766,7 +1807,8 @@ def actualizar_tablero_fuentes(tipo_fuente, fecha_inicio, fecha_fin, n_clicks, n
         df_por_fecha = df_generacion_copy.groupby('Fecha', as_index=False)['Generacion_GWh'].sum().sort_values('Fecha')
         
         # Determinar columna de agrupación
-        grouping_col = 'Tipo' if (not tipo_fuente or str(tipo_fuente).upper() == 'TODAS') else 'Planta'
+        # Siempre agrupar por 'Tipo' cuando hay múltiples fuentes
+        grouping_col = 'Tipo'
         
         # Agrupar por fecha y categoría
         df_por_fuente = df_generacion_copy.groupby(['Fecha', grouping_col], as_index=False)['Generacion_GWh'].sum().sort_values('Fecha')
@@ -1776,15 +1818,27 @@ def actualizar_tablero_fuentes(tipo_fuente, fecha_inicio, fecha_fin, n_clicks, n
         # Fecha para torta inicial (última fecha)
         ultima_fecha = df_por_fecha['Fecha'].max()
         
-        # Crear contenido
-        if tipo_fuente in TIPOS_FUENTE:
-            info_fuente = TIPOS_FUENTE[tipo_fuente]
-            titulo_tipo = info_fuente['label']
-            icono_tipo = info_fuente['icon']
-        else:
-            # Para 'TODAS' u otros casos
+        # Crear contenido - título basado en fuentes seleccionadas
+        if len(tipos_fuente) == 5:
+            # Todas las fuentes seleccionadas
             titulo_tipo = "Todas las Fuentes"
             icono_tipo = "fa-bolt"
+            tipo_fuente = 'TODAS'
+        elif len(tipos_fuente) == 1:
+            # Una sola fuente
+            tipo_fuente = tipos_fuente[0]
+            if tipo_fuente in TIPOS_FUENTE:
+                info_fuente = TIPOS_FUENTE[tipo_fuente]
+                titulo_tipo = info_fuente['label']
+                icono_tipo = info_fuente['icon']
+            else:
+                titulo_tipo = "Generación"
+                icono_tipo = "fa-bolt"
+        else:
+            # Múltiples fuentes seleccionadas (pero no todas)
+            titulo_tipo = f"Comparativa ({len(tipos_fuente)} fuentes)"
+            icono_tipo = "fa-bolt"
+            tipo_fuente = 'MULTIPLES'
         
         contenido = [
             # Encabezado con información del tipo de fuente
@@ -1834,7 +1888,8 @@ def actualizar_tablero_fuentes(tipo_fuente, fecha_inicio, fecha_fin, n_clicks, n
                             dcc.Store(id='store-datos-fuentes', data={
                                 'df_por_fuente': df_por_fuente.to_json(date_format='iso', orient='split'),
                                 'grouping_col': grouping_col,
-                                'tipo_fuente': tipo_fuente,
+                                'tipo_fuente': tipo_fuente,  # Puede ser string o 'MULTIPLES'
+                                'tipos_fuente': tipos_fuente,  # Lista completa de fuentes seleccionadas
                                 'ultima_fecha': ultima_fecha.isoformat()
                             })
                         ])
@@ -1864,7 +1919,7 @@ def actualizar_tablero_fuentes(tipo_fuente, fecha_inicio, fecha_fin, n_clicks, n
         return [], dbc.Alert(f"Error al procesar los datos: {str(e)}", color="danger")
 
 
-# Callback para cargar fichas (se ejecuta al cargar y cuando cambian los filtros)
+# Callback para cargar fichas (OPTIMIZADO: usa crear_fichas_desde_dataframe cuando hay datos en cache)
 @callback(
     Output('contenedor-fichas-generacion', 'children'),
     [Input('date-range-fuentes', 'start_date'),
@@ -1874,14 +1929,11 @@ def actualizar_tablero_fuentes(tipo_fuente, fecha_inicio, fecha_fin, n_clicks, n
      Input('interval-carga-inicial', 'n_intervals')],  # Trigger automático en carga
     prevent_initial_call=False  # SE EJECUTA AL CARGAR LA PÁGINA
 )
-def actualizar_fichas_generacion(start_date, end_date, tipo_fuente, n_clicks, n_intervals):
-    """Genera las fichas al cargar la página y cuando el usuario presiona 'Actualizar Datos'"""
-    
-    print(f"\n🎯 Callback de fichas ejecutado", flush=True)
-    print(f"   start_date: {start_date}, end_date: {end_date}, tipo_fuente: {tipo_fuente}", flush=True)
+def actualizar_fichas_generacion(start_date, end_date, tipo_fuente_seleccionado, n_clicks, n_intervals):
+    """Genera las fichas - SIEMPRE muestra TODAS las fuentes (sin filtrar)"""
     
     # Si no hay valores, mostrar mensaje de espera
-    if start_date is None or end_date is None or tipo_fuente is None:
+    if start_date is None or end_date is None:
         return dbc.Alert("⏳ Inicializando datos...", color="info")
     
     # Convertir fechas de string a date
@@ -1889,14 +1941,28 @@ def actualizar_fichas_generacion(start_date, end_date, tipo_fuente, n_clicks, n_
     fecha_fin = pd.to_datetime(end_date).date()
     
     try:
-        print(f"  🔄 Generando fichas XM para {fecha_inicio} a {fecha_fin}...", flush=True)
-        fichas_html = crear_fichas_generacion_xm_con_fechas(fecha_inicio, fecha_fin, tipo_fuente)
-        print(f"  ✅ Fichas generadas correctamente", flush=True)
-        print(f"  🔍 Tipo de retorno: {type(fichas_html)}", flush=True)
-        print(f"  🔍 Contenido: {str(fichas_html)[:200]}...", flush=True)
-        return fichas_html
+        # SIEMPRE obtener datos de TODAS las fuentes para las fichas
+        todas_fuentes = ['HIDRAULICA', 'TERMICA', 'EOLICA', 'SOLAR', 'BIOMASA']
+        df_generacion_completo = pd.DataFrame()
+        
+        for fuente in todas_fuentes:
+            plantas_df = obtener_listado_recursos(fuente)
+            if not plantas_df.empty:
+                df_gen, _ = obtener_generacion_plantas(fecha_inicio, fecha_fin, plantas_df, tipo_fuente=fuente)
+                if not df_gen.empty:
+                    df_generacion_completo = pd.concat([df_generacion_completo, df_gen], ignore_index=True)
+        
+        if not df_generacion_completo.empty:
+            # Usar función optimizada - pasar 'TODAS' como tipo_fuente
+            logger.info(f"⚡ Generando fichas con TODAS las fuentes")
+            return crear_fichas_desde_dataframe(df_generacion_completo, fecha_inicio, fecha_fin, 'TODAS')
+        
+        # Fallback: usar función original si no hay datos
+        logger.info(f"Generando fichas desde API")
+        return crear_fichas_generacion_xm_con_fechas(fecha_inicio, fecha_fin, 'TODAS')
+        
     except Exception as e:
-        print(f"  ❌ Error generando fichas: {e}", flush=True)
+        logger.error(f"Error generando fichas: {e}")
         import traceback
         traceback.print_exc()
         return dbc.Alert(f"Error cargando indicadores: {str(e)}", color="danger")
@@ -1904,6 +1970,128 @@ def actualizar_fichas_generacion(start_date, end_date, tipo_fuente, n_clicks, n_
 
 # Caché manual para fichas de generación
 _cache_fichas = {}
+
+def crear_fichas_desde_dataframe(df_generacion, fecha_inicio, fecha_fin, tipo_fuente='TODAS'):
+    """
+    OPTIMIZACIÓN: Crea fichas directamente desde DataFrame ya cargado (sin consultar API)
+    
+    Args:
+        df_generacion: DataFrame con datos de generación ya procesados
+        fecha_inicio: Fecha inicial del período
+        fecha_fin: Fecha final del período
+        tipo_fuente: Tipo de fuente para título
+    
+    Returns:
+        dbc.Row con las 3 fichas de indicadores
+    """
+    try:
+        if df_generacion.empty:
+            return dbc.Alert("No hay datos disponibles para generar fichas", color="warning")
+        
+        # Clasificar renovable vs no renovable
+        def es_renovable(tipo_str):
+            tipo_upper = str(tipo_str).upper()
+            renovables = ['HIDRÁULICA', 'HIDRAULICA', 'EÓLICA', 'EOLICA', 'SOLAR', 'BIOMASA']
+            return any(ren in tipo_upper for ren in renovables)
+        
+        df_generacion['Es_Renovable'] = df_generacion['Tipo'].apply(es_renovable)
+        
+        # Calcular totales
+        gen_total = float(df_generacion['Generacion_GWh'].sum())
+        gen_renovable = float(df_generacion[df_generacion['Es_Renovable'] == True]['Generacion_GWh'].sum())
+        gen_no_renovable = float(df_generacion[df_generacion['Es_Renovable'] == False]['Generacion_GWh'].sum())
+        
+        # Calcular porcentajes
+        pct_renovable = float((gen_renovable / gen_total * 100) if gen_total > 0 else 0)
+        pct_no_renovable = float((gen_no_renovable / gen_total * 100) if gen_total > 0 else 0)
+        
+        # Formatear valores
+        valor_total = f"{gen_total:.1f}"
+        valor_renovable = f"{gen_renovable:.1f}"
+        valor_no_renovable = f"{gen_no_renovable:.1f}"
+        porcentaje_renovable = f"{pct_renovable:.1f}"
+        porcentaje_no_renovable = f"{pct_no_renovable:.1f}"
+        
+        # Formatear fechas
+        fecha_inicio_str = fecha_inicio.strftime('%d/%m/%Y')
+        fecha_fin_str = fecha_fin.strftime('%d/%m/%Y')
+        periodo_texto = f"{fecha_inicio_str} - {fecha_fin_str}"
+        
+        # Título según tipo de fuente
+        if tipo_fuente == 'TODAS':
+            titulo_generacion = "Generación Total SIN"
+        else:
+            tipo_info = TIPOS_FUENTE.get(tipo_fuente, {})
+            titulo_generacion = f"Generación {tipo_info.get('label', tipo_fuente)}"
+        
+        logger.info(f"✅ Fichas creadas desde DataFrame: {gen_total:.1f} GWh ({len(df_generacion)} registros)")
+        
+        # Crear fichas HTML
+        return dbc.Row([
+            # Ficha Generación Total
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.Div([
+                            html.I(className="fas fa-bolt fa-2x mb-3", style={'color': '#0f172a'}),
+                            html.H6(titulo_generacion, className="mb-2", style={'fontWeight': '500', 'color': '#111827'}),
+                            html.H2(valor_total, className='kpi-number mb-1', 
+                                   style={'fontWeight': 'bold', 'fontSize': '2.5rem'}),
+                            html.P("GWh", className="text-muted mb-2", style={'fontSize': '1.1rem', 'fontWeight': '500'}),
+                            html.Small(periodo_texto, className="text-muted", style={'fontSize': '0.85rem'})
+                        ], style={'textAlign': 'center'})
+                    ], style={'background': '#ffffff', 'borderRadius': '12px', 'padding': '1.5rem',
+                             'minHeight': '180px', 'display': 'flex', 'alignItems': 'center'})
+                ], className="h-100 shadow-sm")
+            ], lg=4, md=6, className="mb-4"),
+            
+            # Ficha Renovable
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.Div([
+                            html.I(className="fas fa-leaf fa-2x mb-3", style={'color': '#0f172a'}),
+                            html.H6("Generación Renovable", className="mb-2", style={'fontWeight': '500', 'color': '#111827'}),
+                            html.H2(valor_renovable, className='kpi-number mb-1',
+                                   style={'fontWeight': 'bold', 'fontSize': '2.5rem'}),
+                            html.P("GWh", className="text-muted mb-2", style={'fontSize': '1.1rem', 'fontWeight': '500'}),
+                            html.Span(f"{porcentaje_renovable}% del total", className="badge",
+                                     style={'backgroundColor': 'rgba(15, 23, 42, 0.08)', 'color': '#111827',
+                                           'fontSize': '0.9rem', 'padding': '0.4rem 0.8rem', 'borderRadius': '20px'})
+                        ], style={'textAlign': 'center'})
+                    ], style={'background': 'linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%)',
+                             'borderRadius': '12px', 'padding': '1.5rem', 'minHeight': '180px',
+                             'display': 'flex', 'alignItems': 'center'})
+                ], className="h-100 shadow-sm")
+            ], lg=4, md=6, className="mb-4"),
+            
+            # Ficha No Renovable
+            dbc.Col([
+                dbc.Card([
+                    dbc.CardBody([
+                        html.Div([
+                            html.I(className="fas fa-industry fa-2x mb-3", style={'color': '#0f172a'}),
+                            html.H6("Generación No Renovable", className="mb-2", style={'fontWeight': '500', 'color': '#111827'}),
+                            html.H2(valor_no_renovable, className='kpi-number mb-1',
+                                   style={'fontWeight': 'bold', 'fontSize': '2.5rem'}),
+                            html.P("GWh", className="text-muted mb-2", style={'fontSize': '1.1rem', 'fontWeight': '500'}),
+                            html.Span(f"{porcentaje_no_renovable}% del total", className="badge",
+                                     style={'backgroundColor': 'rgba(15, 23, 42, 0.08)', 'color': '#111827',
+                                           'fontSize': '0.9rem', 'padding': '0.4rem 0.8rem', 'borderRadius': '20px'})
+                        ], style={'textAlign': 'center'})
+                    ], style={'background': 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)',
+                             'borderRadius': '12px', 'padding': '1.5rem', 'minHeight': '180px',
+                             'display': 'flex', 'alignItems': 'center'})
+                ], className="h-100 shadow-sm")
+            ], lg=4, md=6, className="mb-4")
+        ])
+        
+    except Exception as e:
+        logger.error(f"Error creando fichas desde DataFrame: {e}")
+        import traceback
+        traceback.print_exc()
+        return dbc.Alert(f"Error generando fichas: {str(e)}", color="danger")
+
 
 # Función auxiliar que recibe las fechas y tipo de fuente como parámetros
 def crear_fichas_generacion_xm_con_fechas(fecha_inicio, fecha_fin, tipo_fuente='TODAS'):
