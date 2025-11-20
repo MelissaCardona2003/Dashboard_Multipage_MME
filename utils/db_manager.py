@@ -34,7 +34,7 @@ def get_connection():
     """
     conn = None
     try:
-        conn = sqlite3.connect(str(DB_PATH), timeout=10.0)
+        conn = sqlite3.connect(str(DB_PATH), timeout=30.0, check_same_thread=False)
         conn.row_factory = sqlite3.Row  # Permite acceso por nombre de columna
         yield conn
     except sqlite3.Error as e:
@@ -118,10 +118,15 @@ def get_metric_data(
         query += " ORDER BY fecha, recurso"
         
         # Ejecutar query
+        import time
+        t_start = time.time()
+        logger.info(f"🔄 Iniciando query SQLite: {metrica}/{entidad} ({len(params)-4 if recurso_filter else 0} recursos)")
+        
         with get_connection() as conn:
             df = pd.read_sql_query(query, conn, params=params)
         
-        logger.info(f"✅ Consultado {metrica}/{entidad}: {len(df)} registros ({fecha_inicio} a {fecha_fin})")
+        elapsed = time.time() - t_start
+        logger.info(f"✅ Query completada en {elapsed:.2f}s: {len(df)} registros ({fecha_inicio} a {fecha_fin})")
         return df
         
     except Exception as e:

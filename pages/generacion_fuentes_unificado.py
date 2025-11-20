@@ -2104,8 +2104,8 @@ def layout():
                         html.Label("Rango de Fechas:", className="fw-bold"),
                         dcc.DatePickerRange(
                             id='date-range-fuentes',
-                            start_date=date.today() - timedelta(days=365),
-                            end_date=date.today() - timedelta(days=3),
+                            start_date=date.today() - timedelta(days=365),  # ✅ Último año por defecto
+                            end_date=date.today() - timedelta(days=1),
                             display_format='DD/MM/YYYY',
                             style={'width': '100%'}
                         ),
@@ -2117,13 +2117,11 @@ def layout():
                     dbc.Col([
                         html.Br(),
                         dbc.Button(
-                            [html.I(className="fas fa-sync-alt me-2"), "🔄 Refrescar"],
+                            [html.I(className="fas fa-sync-alt me-2"), "Actualizar Datos"],
                             id="btn-actualizar-fuentes",
-                            color="secondary",
-                            outline=True,
+                            color="primary",
                             className="w-100",
-                            size="lg",
-                            title="Los datos se cargan automáticamente. Usa este botón solo para refrescar manualmente."
+                            size="lg"
                         )
                     ], md=3)
                 ])
@@ -2325,14 +2323,14 @@ def cargar_tabla_resumen(_):
     """Cargar tabla resumen de todas las plantas - LAZY LOAD"""
     return crear_tabla_resumen_todas_plantas()
 
-# Callback - CARGA AUTOMÁTICA al cargar página y al cambiar filtros
+# Callback - Carga automática al inicio + al hacer clic
 @callback(
     Output('contenido-fuentes', 'children'),
-    [Input('tipo-fuente-dropdown', 'value'),
-     Input('date-range-fuentes', 'start_date'),
-     Input('date-range-fuentes', 'end_date'),
-     Input('btn-actualizar-fuentes', 'n_clicks')],
-    prevent_initial_call=False  # ✅ Se ejecuta automáticamente al cargar
+    Input('btn-actualizar-fuentes', 'n_clicks'),
+    [State('tipo-fuente-dropdown', 'value'),
+     State('date-range-fuentes', 'start_date'),
+     State('date-range-fuentes', 'end_date')],
+    prevent_initial_call=False  # ✅ Carga automática (preload_app evita múltiples ejecuciones)
 )
 def actualizar_tablero_fuentes(n_clicks, tipos_fuente, fecha_inicio, fecha_fin):
     debug_file = "/home/admonctrlxm/server/logs/debug_callback.log"
@@ -2624,15 +2622,16 @@ def actualizar_tablero_fuentes(n_clicks, tipos_fuente, fecha_inicio, fecha_fin):
         ], color="danger")
 
 
-# Callback para cargar fichas - CARGA AUTOMÁTICA al cambiar fechas O hacer clic
+# Callback para cargar fichas - Carga automática al inicio + al hacer clic
 @callback(
     Output('contenedor-fichas-generacion', 'children'),
-    [Input('date-range-fuentes', 'start_date'),
-     Input('date-range-fuentes', 'end_date'),
-     Input('btn-actualizar-fuentes', 'n_clicks')],
-    [State('tipo-fuente-dropdown', 'value')]
+    Input('btn-actualizar-fuentes', 'n_clicks'),
+    [State('date-range-fuentes', 'start_date'),
+     State('date-range-fuentes', 'end_date'),
+     State('tipo-fuente-dropdown', 'value')],
+    prevent_initial_call=False  # ✅ Carga automática (preload_app evita múltiples ejecuciones)
 )
-def actualizar_fichas_generacion(start_date, end_date, n_clicks, tipo_fuente_seleccionado):
+def actualizar_fichas_generacion(n_clicks, start_date, end_date, tipo_fuente_seleccionado):
     """Genera las fichas - SIEMPRE muestra TODAS las fuentes (sin filtrar)"""
     
     logger.info(f"� CALLBACK FICHAS EJECUTADO")

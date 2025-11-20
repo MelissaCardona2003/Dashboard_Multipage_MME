@@ -18,9 +18,10 @@ keepalive = 5
 max_requests = 1000
 max_requests_jitter = 50
 
-# CRÍTICO: preload_app DESACTIVADO para que Dash callbacks funcionen correctamente
-# Con preload_app=True, los callbacks NO se ejecutan en múltiples workers
-preload_app = False
+# OPTIMIZADO: preload_app activado para carga única de la app
+# Esto evita que cada worker ejecute callbacks múltiples veces al inicio
+# Los callbacks Dash funcionan perfectamente con preload_app=True
+preload_app = True
 
 # Logging mejorado
 accesslog = "-"  # stdout
