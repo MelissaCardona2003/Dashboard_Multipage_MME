@@ -691,11 +691,38 @@ def crear_grafica_torta_fuentes(df_por_fuente, fecha_seleccionada, grouping_col,
     }
     
     # Filtrar datos para la fecha seleccionada
-    df_torta = df_por_fuente[df_por_fuente['Fecha'] == fecha_seleccionada].sort_values('Participacion_%', ascending=False)
+    # Normalizar ambas fechas al primer día del mes para comparación
+    df_por_fuente_copy = df_por_fuente.copy()
+    
+    # Convertir fecha seleccionada a datetime para normalización
+    if isinstance(fecha_seleccionada, str):
+        fecha_sel_dt = pd.to_datetime(fecha_seleccionada)
+    elif isinstance(fecha_seleccionada, date) and not isinstance(fecha_seleccionada, datetime):
+        fecha_sel_dt = pd.Timestamp(fecha_seleccionada)
+    else:
+        fecha_sel_dt = pd.to_datetime(fecha_seleccionada)
+    
+    # Obtener año y mes de la fecha seleccionada
+    year_sel = fecha_sel_dt.year
+    month_sel = fecha_sel_dt.month
+    
+    # Convertir fechas del DataFrame a datetime si no lo son
+    if 'Fecha' in df_por_fuente_copy.columns:
+        df_por_fuente_copy['Fecha'] = pd.to_datetime(df_por_fuente_copy['Fecha'])
+        # Agregar columnas de año y mes para comparación
+        df_por_fuente_copy['Year'] = df_por_fuente_copy['Fecha'].dt.year
+        df_por_fuente_copy['Month'] = df_por_fuente_copy['Fecha'].dt.month
+    
+    # Filtrar por año y mes (más robusto que comparar fechas exactas)
+    df_torta = df_por_fuente_copy[
+        (df_por_fuente_copy['Year'] == year_sel) & 
+        (df_por_fuente_copy['Month'] == month_sel)
+    ].sort_values('Participacion_%', ascending=False)
     
     if df_torta.empty:
+        logger.warning(f"No hay datos para {year_sel}/{month_sel:02d}")
         return go.Figure().add_annotation(
-            text=f"No hay datos para {fecha_seleccionada.strftime('%d/%m/%Y')}",
+            text=f"No hay datos para {fecha_sel_dt.strftime('%m/%Y')}",
             xref="paper", yref="paper", x=0.5, y=0.5
         )
     
