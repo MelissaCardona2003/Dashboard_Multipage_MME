@@ -7,7 +7,7 @@ import plotly.express as px
 # Imports locales para componentes uniformes
 from utils.components import crear_header, crear_sidebar_universal, crear_boton_regresar
 from utils.config import COLORS
-from utils._xm import get_objetoAPI, fetch_metric_data
+from utils._xm import get_objetoAPI, fetch_metric_data, obtener_datos_desde_sqlite
 from utils.cache_manager import cached_function
 
 # Importar pydataxm si está disponible
@@ -32,13 +32,38 @@ GENERACION_TECHNOLOGIES = [
 ]
 
 def formatear_fecha_espanol(fecha_obj):
-    """Convierte un objeto date a formato español (ej: '21 de octubre')"""
+    """
+    Convierte un objeto date a formato español con indicador de antigüedad.
+    
+    - Datos del año actual: '21 de octubre'
+    - Datos de años anteriores: '21 de octubre de 2024'
+    - Datos con más de 7 días: '21 de octubre (hace 10 días)'
+    """
     meses = {
         1: 'enero', 2: 'febrero', 3: 'marzo', 4: 'abril',
         5: 'mayo', 6: 'junio', 7: 'julio', 8: 'agosto',
         9: 'septiembre', 10: 'octubre', 11: 'noviembre', 12: 'diciembre'
     }
-    return f"{fecha_obj.day} de {meses[fecha_obj.month]}"
+    
+    hoy = date.today()
+    dias_antiguedad = (hoy - fecha_obj).days
+    
+    # Formato base
+    fecha_texto = f"{fecha_obj.day} de {meses[fecha_obj.month]}"
+    
+    # Agregar año si es de un año diferente
+    if fecha_obj.year != hoy.year:
+        fecha_texto += f" de {fecha_obj.year}"
+    
+    # Agregar indicador de antigüedad si tiene más de 2 días
+    if dias_antiguedad > 2:
+        fecha_texto += f" (hace {dias_antiguedad} días)"
+    elif dias_antiguedad == 1:
+        fecha_texto += " (ayer)"
+    elif dias_antiguedad == 2:
+        fecha_texto += " (hace 2 días)"
+    
+    return fecha_texto
 
 def obtener_metricas_hidricas():
     """
@@ -53,129 +78,80 @@ def obtener_metricas_hidricas():
         fecha_fin = date.today() - timedelta(days=1)
         
         # === 1. RESERVAS HÍDRICAS ===
-        # Buscar fecha con datos disponibles (hasta 7 días atrás)
+        # Usar obtener_datos_desde_sqlite() para buscar última fecha disponible
         reserva_pct, reserva_gwh, fecha_reserva = None, None, None
-        for dias_atras in range(7):
-            fecha_prueba = fecha_fin - timedelta(days=dias_atras)
-            fecha_str = fecha_prueba.strftime('%Y-%m-%d')
+        
+        df_vol, fecha_vol = obtener_datos_desde_sqlite('VoluUtilDiarEner', 'Embalse', fecha_fin)
+        df_cap, fecha_cap = obtener_datos_desde_sqlite('CapaUtilDiarEner', 'Embalse', fecha_fin)
+        
+        if df_vol is not None and df_cap is not None:
+            # Detectar nombre de columna de valor (puede ser 'Value' o 'Values_code')
+            col_value = 'Value' if 'Value' in df_vol.columns else 'Values_code' if 'Values_code' in df_vol.columns else None
             
-            # Obtener Volumen Útil Diario Energía y Capacidad Útil
-            df_vol = fetch_metric_data('VoluUtilDiarEner', 'Embalse', fecha_str, fecha_str)
-            df_cap = fetch_metric_data('CapaUtilDiarEner', 'Embalse', fecha_str, fecha_str)
-            
-            if df_vol is not None and not df_vol.empty and df_cap is not None and not df_cap.empty:
-                # Detectar nombre de columna de valor (puede ser 'Value' o 'Values_code')
-                col_value = 'Value' if 'Value' in df_vol.columns else 'Values_code' if 'Values_code' in df_vol.columns else None
+            if col_value:
+                # Precalentamiento ya convirtió a GWh (Wh ÷ 1e9)
+                # Solo leer y sumar
+                vol_total_gwh = df_vol[col_value].sum()
+                cap_total_gwh = df_cap[col_value].sum()
                 
-                if col_value:
-                    # Convertir de Wh a GWh (la API devuelve en Wh)
-                    vol_total_gwh = df_vol[col_value].sum() / 1e9
-                    cap_total_gwh = df_cap[col_value].sum() / 1e9
-                    
-                    if cap_total_gwh > 0:
-                        reserva_pct = round((vol_total_gwh / cap_total_gwh) * 100, 2)
-                        reserva_gwh = vol_total_gwh
-                        fecha_reserva = fecha_prueba
-                        print(f"✅ Reservas calculadas: {reserva_pct}% ({reserva_gwh:.0f} GWh) - Fecha: {fecha_str}")
-                        break
+                if cap_total_gwh > 0:
+                    reserva_pct = round((vol_total_gwh / cap_total_gwh) * 100, 2)
+                    reserva_gwh = round(vol_total_gwh, 2)
+                    fecha_reserva = fecha_vol
+                    print(f"✅ Reservas: {reserva_pct}% ({reserva_gwh:.2f} GWh) - Fecha: {fecha_vol}")
         
         # === 2. APORTES HÍDRICOS ===
-        # Calcular promedio del mes actual hasta la fecha
+        # MODIFICACIÓN 2025-11-19: Usar SQLite (ya tiene datos en GWh) en lugar de API
         aporte_pct, aporte_gwh, fecha_aporte = None, None, None
-        fecha_inicio_mes = fecha_fin.replace(day=1)
-        fecha_inicio_str = fecha_inicio_mes.strftime('%Y-%m-%d')
-        fecha_fin_str = fecha_fin.strftime('%Y-%m-%d')
         
-        df_aportes = fetch_metric_data('AporEner', 'Sistema', fecha_inicio_str, fecha_fin_str)
-        df_media_hist = fetch_metric_data('AporEnerMediHist', 'Sistema', fecha_inicio_str, fecha_fin_str)
+        # Buscar última fecha disponible en SQLite
+        _, fecha_fin_aportes = obtener_datos_desde_sqlite('AporEner', 'Sistema', fecha_fin)
         
-        if df_aportes is not None and not df_aportes.empty and df_media_hist is not None and not df_media_hist.empty:
-            # Detectar nombre de columna de valor
-            col_value_ap = 'Value' if 'Value' in df_aportes.columns else 'Values_code' if 'Values_code' in df_aportes.columns else None
-            col_value_mh = 'Value' if 'Value' in df_media_hist.columns else 'Values_code' if 'Values_code' in df_media_hist.columns else None
+        if fecha_fin_aportes:
+            # Calcular promedio del mes actual (desde día 1 hasta última fecha disponible)
+            fecha_inicio_mes = fecha_fin_aportes.replace(day=1)
             
-            if col_value_ap and col_value_mh:
-                # Promedio acumulado del mes
-                aportes_promedio = df_aportes[col_value_ap].mean()
-                media_promedio = df_media_hist[col_value_mh].mean()
+            # Obtener todos los días del mes desde SQLite
+            from utils.db_manager import get_metric_data
+            fecha_inicio_str = fecha_inicio_mes.strftime('%Y-%m-%d')
+            fecha_fin_str = fecha_fin_aportes.strftime('%Y-%m-%d')
+            
+            df_aportes = get_metric_data('AporEner', 'Sistema', fecha_inicio_str, fecha_fin_str)
+            df_media_hist = get_metric_data('AporEnerMediHist', 'Sistema', fecha_inicio_str, fecha_fin_str)
+            
+            if df_aportes is not None and not df_aportes.empty and df_media_hist is not None and not df_media_hist.empty:
+                # SQLite ya tiene datos en GWh (conversión Wh→GWh en ETL)
+                aportes_promedio = df_aportes['valor_gwh'].mean()
+                media_promedio = df_media_hist['valor_gwh'].mean()
                 
                 if media_promedio > 0:
                     aporte_pct = round((aportes_promedio / media_promedio) * 100, 2)
-                    # Mostrar la Media Histórica en GWh (igual que XM)
-                    # Convertir de Wh a GWh (dividir por 1,000,000)
-                    aporte_gwh = media_promedio / 1e6
-                    fecha_aporte = fecha_fin
-                    print(f"✅ Aportes calculados: {aporte_pct}% (Media histórica: {aporte_gwh:.2f} GWh) - Promedio del mes")
+                    aporte_gwh = media_promedio  # XM muestra media histórica
+                    fecha_aporte = fecha_fin_aportes
+                    print(f"✅ Aportes: {aporte_pct}% (Real: {aportes_promedio:.2f} GWh, Hist: {media_promedio:.2f} GWh) - Fecha: {fecha_fin_aportes.strftime('%Y-%m-%d')}")
+                else:
+                    print("⚠️ Media histórica = 0, no se puede calcular porcentaje de aportes")
+            else:
+                print(f"⚠️ No se encontraron datos de aportes para el mes {fecha_fin_aportes.strftime('%Y-%m')}")
+        else:
+            print("⚠️ No se encontró fecha disponible para aportes")
         
         # === 3. GENERACIÓN SIN ===
-        # METODOLOGÍA CORRECTA: Sumar generación de TODAS las plantas (Gene/Recurso)
-        # Esto asegura que el valor coincida con la suma de todas las fuentes
+        # Usar obtener_datos_desde_sqlite() para buscar última fecha disponible
         gen_gwh, fecha_gen = None, None
         
-        # Buscar datos en los últimos 7 días
-        for dias_atras in range(7):
-            fecha_prueba = fecha_fin - timedelta(days=dias_atras)
-            fecha_str = fecha_prueba.strftime('%Y-%m-%d')
-            
-            # Obtener generación por recurso (todas las plantas)
-            df_generacion = fetch_metric_data('Gene', 'Recurso', fecha_str, fecha_str)
-            
-            if df_generacion is not None and not df_generacion.empty:
-                print(f"\n{'='*60}")
-                print(f"📊 Generación obtenida para {fecha_str}: {len(df_generacion)} plantas")
-                print(f"   Columnas disponibles: {df_generacion.columns.tolist()}")
-                
-                # Buscar columnas horarias (Values_Hour00, Values_Hour01, ..., Values_Hour23)
-                horas_cols = [col for col in df_generacion.columns if 'Hour' in str(col) and 'Values' in str(col)]
-                
-                if horas_cols:
-                    print(f"   ✅ Encontradas {len(horas_cols)} columnas horarias: {horas_cols[:3]}...{horas_cols[-3:]}")
-                    
-                    # Tomar una muestra para ver los valores
-                    print(f"\n   🔍 ANÁLISIS DE VALORES (primera planta como ejemplo):")
-                    primera_fila = df_generacion.iloc[0]
-                    print(f"   Planta: {primera_fila.get('Values_code', 'N/A')}")
-                    valores_ejemplo = [primera_fila[col] for col in horas_cols[:5]]
-                    print(f"   Valores primeras 5 horas: {valores_ejemplo}")
-                    suma_una_planta = sum([primera_fila[col] if pd.notna(primera_fila[col]) else 0 for col in horas_cols])
-                    print(f"   Suma 24 horas (1 planta): {suma_una_planta:,.2f}")
-                    
-                    # Sumar todas las plantas y todas las 24 horas
-                    gen_total_sin_conversion = 0
-                    for col in horas_cols:
-                        gen_total_sin_conversion += df_generacion[col].fillna(0).sum()
-                    
-                    print(f"\n   📊 SUMA TOTAL SIN CONVERSIÓN:")
-                    print(f"   Total bruto: {gen_total_sin_conversion:,.2f}")
-                    print(f"   Total / 1000 (kWh→GWh): {gen_total_sin_conversion/1000:,.2f} GWh")
-                    print(f"   Total / 1000000 (Wh→GWh): {gen_total_sin_conversion/1000000:,.2f} GWh")
-                    
-                    # Determinar la conversión correcta basada en el rango de valores
-                    # Si la suma está en millones, probablemente es Wh
-                    # Si la suma está en miles/cientos de miles, probablemente es kWh
-                    # Un día de generación típico en Colombia es ~200-250 GWh
-                    if gen_total_sin_conversion > 100000000:  # > 100 millones, probablemente Wh
-                        gen_gwh = gen_total_sin_conversion / 1000000
-                        unidad_original = "Wh"
-                    elif gen_total_sin_conversion > 100000:  # > 100 mil, probablemente kWh
-                        gen_gwh = gen_total_sin_conversion / 1000
-                        unidad_original = "kWh"
-                    else:  # Ya está en GWh o MWh
-                        gen_gwh = gen_total_sin_conversion
-                        unidad_original = "GWh/MWh"
-                    
-                    fecha_gen = fecha_prueba
-                    print(f"\n   ✅ CONVERSIÓN APLICADA:")
-                    print(f"   Unidad detectada: {unidad_original}")
-                    print(f"   GENERACIÓN SIN TOTAL: {gen_gwh:.2f} GWh")
-                    print(f"{'='*60}\n")
-                    print(f"✅ Generación SIN calculada: {gen_gwh:.2f} GWh (suma de {len(df_generacion)} plantas × 24 horas) - Fecha: {fecha_str}")
-                    break
-                else:
-                    print(f"⚠️ No se encontraron columnas horarias en Gene/Recurso para {fecha_str}")
+        df_generacion, fecha_gen = obtener_datos_desde_sqlite('Gene', 'Sistema', fecha_fin)
         
-        if gen_gwh is None:
-            print("⚠️ No se pudo calcular la generación total del SIN")
+        if df_generacion is not None:
+            # Precalentamiento ya agregó Values_Hour* y convirtió kWh→GWh
+            # Solo leer columna Value
+            if 'Value' in df_generacion.columns:
+                gen_gwh = round(df_generacion['Value'].sum(), 2)
+                print(f"✅ Generación SIN: {gen_gwh:.2f} GWh - Fecha: {fecha_gen}")
+            else:
+                print(f"⚠️ No se encontró columna Value en Gene/Sistema")
+        else:
+            print("⚠️ No se pudo obtener la generación total del SIN")
 
         
         return crear_fichas_hidricas_con_datos(
@@ -196,18 +172,26 @@ def crear_fichas_hidricas_con_datos(reserva_pct, reserva_gwh, fecha_reserva,
                                     gen_gwh, fecha_gen):
     """Crear fichas usando datos reales calculados con metodología XM"""
     
-    # Formatear fechas
-    fecha_texto_reserva = formatear_fecha_espanol(fecha_reserva) if fecha_reserva else "N/D"
-    fecha_texto_aporte = formatear_fecha_espanol(fecha_aporte) if fecha_aporte else "N/D"
-    fecha_texto_gen = formatear_fecha_espanol(fecha_gen) if fecha_gen else "N/D"
+    # Formatear fechas con indicador de antigüedad
+    fecha_texto_reserva = formatear_fecha_espanol(fecha_reserva) if fecha_reserva else "Sin datos disponibles"
+    fecha_texto_aporte = formatear_fecha_espanol(fecha_aporte) if fecha_aporte else "Sin datos disponibles"
+    fecha_texto_gen = formatear_fecha_espanol(fecha_gen) if fecha_gen else "Sin datos disponibles"
     
-    # Valores por defecto si no hay datos
+    # Valores por defecto si no hay datos - mostrar "N/D" en lugar de 0
     if reserva_pct is None:
-        reserva_pct, reserva_gwh = 0, 0
+        reserva_pct_texto, reserva_gwh_texto = "N/D", "Sin datos"
+    else:
+        reserva_pct_texto, reserva_gwh_texto = f"{reserva_pct:.2f}", f"{reserva_gwh:,.2f} GWh"
+    
     if aporte_pct is None:
-        aporte_pct, aporte_gwh = 0, 0
+        aporte_pct_texto, aporte_gwh_texto = "N/D", "Sin datos"
+    else:
+        aporte_pct_texto, aporte_gwh_texto = f"{aporte_pct:.2f}", f"{aporte_gwh:.2f} GWh"
+    
     if gen_gwh is None:
-        gen_gwh = 0
+        gen_gwh_texto = "N/D"
+    else:
+        gen_gwh_texto = f"{gen_gwh:.2f}"
     
     return dbc.Row([
         # Ficha 1: Reservas Hídricas
@@ -220,14 +204,14 @@ def crear_fichas_hidricas_con_datos(reserva_pct, reserva_gwh, fecha_reserva,
                         html.H6("Reservas Hídricas [%]", 
                                className="text-muted mb-2",
                                style={'fontSize': '0.85rem'}),
-                        html.H3(f"{reserva_pct:.2f}", 
+                        html.H3(reserva_pct_texto, 
                                className="mb-1",
                                style={
                                    'color': '#86D293',
                                    'fontWeight': 'bold',
                                    'fontSize': '2rem'
                                }),
-                        html.P(f"{reserva_gwh:,.0f} GWh", 
+                        html.P(reserva_gwh_texto, 
                               className="text-muted mb-2",
                               style={'fontSize': '0.8rem'}),
                         html.P(fecha_texto_reserva, 
@@ -253,14 +237,14 @@ def crear_fichas_hidricas_con_datos(reserva_pct, reserva_gwh, fecha_reserva,
                         html.H6("Aportes Hídricos [%]", 
                                className="text-muted mb-2",
                                style={'fontSize': '0.85rem'}),
-                        html.H3(f"{aporte_pct:.2f}", 
+                        html.H3(aporte_pct_texto, 
                                className="mb-1",
                                style={
                                    'color': '#4DA6FF',
                                    'fontWeight': 'bold',
                                    'fontSize': '2rem'
                                }),
-                        html.P(f"{aporte_gwh:.2f} GWh", 
+                        html.P(aporte_gwh_texto, 
                               className="text-muted mb-2",
                               style={'fontSize': '0.8rem'}),
                         html.P(fecha_texto_aporte, 
@@ -286,7 +270,7 @@ def crear_fichas_hidricas_con_datos(reserva_pct, reserva_gwh, fecha_reserva,
                         html.H6("Generación SIN", 
                                className="text-muted mb-2",
                                style={'fontSize': '0.85rem'}),
-                        html.H3(f"{gen_gwh:.2f}", 
+                        html.H3(gen_gwh_texto, 
                                className="mb-1",
                                style={
                                    'color': '#FFB84D',

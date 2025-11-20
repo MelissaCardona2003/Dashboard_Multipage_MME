@@ -21,7 +21,7 @@ def fetch_gene_recurso_chunked(objetoAPI, start: date, end: date, filtros: Itera
 	"""Consulta Gene con Entity='Recurso' para una lista de filtros (SIC) en lotes y por chunks de fechas.
 	Devuelve DataFrame con columnas: ['Codigo','Fecha','Generacion_GWh'] agregadas por día.
 	OPTIMIZADO: Usa cache manager para evitar consultas repetidas a API.
-	MEJORA DE PERFORMANCE: chunk_days aumentado de 90 a 180 días para reducir overhead.
+	MEJORA DE PERFORMANCE: chunk_days dinámico según tamaño del rango.
 	"""
 	from utils._xm import fetch_metric_data
 	from utils.cache_manager import get_cache_key, get_from_cache, save_to_cache
@@ -40,12 +40,49 @@ def fetch_gene_recurso_chunked(objetoAPI, start: date, end: date, filtros: Itera
 		logger.info(f"✅ Cache válido para Gene/Recurso ({len(filtros)} códigos, {start} a {end})")
 		return cached_data
 
-	# MEJORA: chunk_days por defecto 180 (era 90) - menos llamadas API
+	# OPTIMIZACIÓN V2: Chunk days dinámico según rango total
+	total_days = (end - start).days
+	if total_days <= 60:
+		chunk_days = total_days  # 1 consulta para rangos cortos
+		logger.info(f"📊 Rango corto ({total_days} días) - 1 consulta")
+	elif total_days <= 180:
+		chunk_days = 90  # 2 consultas para rango medio
+		logger.info(f"📊 Rango medio ({total_days} días) - ~{(total_days//90)+1} consultas")
+	elif total_days <= 365:
+		chunk_days = 180  # 2-3 consultas para 1 año
+		logger.info(f"📊 Rango grande ({total_days} días) - ~{(total_days//180)+1} consultas")
+	else:
+		chunk_days = 365  # Max 365 días por chunk para rangos muy grandes
+		logger.info(f"📊 Rango muy grande ({total_days} días) - ~{(total_days//365)+1} consultas")
+	
+	# OPTIMIZACIÓN V3: Reducir batch_size para rangos grandes (evitar timeouts)
+	if total_days > 365:
+		batch_size = 30  # Lotes más pequeños para rangos >1 año
+		backoff_sec = 1.2  # Más pausa entre requests
+		logger.info(f"⚠️ Rango >1 año: batch_size reducido a {batch_size} para estabilidad")
+	elif total_days > 180:
+		batch_size = 40  # Lotes medianos para rangos >6 meses
+		backoff_sec = 1.0
+	
+	import time
 	registros = []
+	total_batches = sum(1 for _ in chunk_date_ranges(start, end, chunk_days=chunk_days) for _ in range(0, len(filtros), batch_size))
+	batch_count = 0
+	
 	for ini, fin in chunk_date_ranges(start, end, chunk_days=chunk_days):
 		# Batches por códigos SIC
 		for i in range(0, len(filtros), batch_size):
+			batch_count += 1
 			lote = filtros[i:i+batch_size]
+			
+			# OPTIMIZACIÓN: Backoff entre batches para evitar saturar API
+			if batch_count > 1:
+				time.sleep(backoff_sec)
+			
+			# Log de progreso para rangos grandes
+			if total_batches > 5 and batch_count % 5 == 0:
+				logger.info(f"📊 Progreso: {batch_count}/{total_batches} batches completados")
+			
 			# Usar la API directamente con códigos específicos
 			df = objetoAPI.request_data("Gene", "Recurso", ini, fin, lote)
 			if df is None or df.empty:

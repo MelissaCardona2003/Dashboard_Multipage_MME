@@ -18,8 +18,9 @@ keepalive = 5
 max_requests = 1000
 max_requests_jitter = 50
 
-# OPTIMIZADO: Precargar app para compartir memoria entre workers (menor uso RAM)
-preload_app = True
+# CRÍTICO: preload_app DESACTIVADO para que Dash callbacks funcionen correctamente
+# Con preload_app=True, los callbacks NO se ejecutan en múltiples workers
+preload_app = False
 
 # Logging mejorado
 accesslog = "-"  # stdout

@@ -46,34 +46,50 @@ logger = setup_logger(__name__)
 METRICAS_IMPORTANTES = {
     'DemaEner': {
         'nombre': 'Demanda de Energía',
+        'descripcion': 'Consumo total de energía eléctrica del Sistema Interconectado Nacional (SIN) medido en MWh. Representa la energía que requieren todos los usuarios del país: residenciales, comerciales, industriales y oficiales. Es el indicador principal para evaluar el crecimiento del sector energético.',
         'descripcion_practica': 'Consumo total de energía eléctrica del Sistema Interconectado Nacional (SIN) medido en MWh. Representa la energía que requieren todos los usuarios del país: residenciales, comerciales, industriales y oficiales. Es el indicador principal para evaluar el crecimiento del sector energético.',
         'unidad': 'MWh',
+        'frecuencia': 'Horaria',
+        'criticidad': 'Alta',
         'uso_directo': 'El MME utiliza esta métrica para: 1) Proyectar el crecimiento energético del país y planificar nueva capacidad de generación, 2) Dimensionar las redes de transmisión necesarias, 3) Establecer políticas de eficiencia energética, 4) Calcular subsidios y contribuciones del FSSRI',
         'valor_critico': 'Demanda máxima histórica Colombia: ~11,800 MWh/h. Picos >12,000 MWh/h requieren activación de reservas de emergencia.',
+        'aplicaciones': ['Proyección de crecimiento energético', 'Planificación de nueva capacidad', 'Políticas de eficiencia energética', 'Cálculo de subsidios FSSRI'],
         'categoria': 'demanda'
     },
     'GeneReal': {
         'nombre': 'Generación Real',
+        'descripcion': 'Energía efectivamente producida por todas las plantas generadoras del SIN en tiempo real. Incluye plantas hidráulicas, térmicas, eólicas, solares y menores. Muestra la capacidad real del sistema vs. la capacidad instalada, considerando mantenimientos, fallas y restricciones operativas.',
         'descripcion_practica': 'Energía efectivamente producida por todas las plantas generadoras del SIN en tiempo real. Incluye plantas hidráulicas, térmicas, eólicas, solares y menores. Muestra la capacidad real del sistema vs. la capacidad instalada, considerando mantenimientos, fallas y restricciones operativas.',
         'unidad': 'MWh',
+        'frecuencia': 'Horaria',
+        'criticidad': 'Alta',
         'uso_directo': 'El MME la usa para: 1) Monitorear la confiabilidad del parque generador nacional, 2) Evaluar la necesidad de nuevas licitaciones de generación, 3) Detectar problemas operativos en tiempo real, 4) Coordinar con el ONS medidas de emergencia',
         'valor_critico': 'Margen mínimo 200-300 MW sobre demanda. Déficit vs demanda activa Plan de Emergencia del ONS.',
+        'aplicaciones': ['Monitoreo de confiabilidad', 'Evaluación de licitaciones', 'Detección de problemas operativos', 'Coordinación con ONS'],
         'categoria': 'generacion'
     },
     'PrecBols': {
         'nombre': 'Precio de Bolsa Nacional',
+        'descripcion': 'Costo marginal del sistema eléctrico colombiano expresado en pesos por kWh. Se determina por el costo de la planta más costosa que debe operar para atender la demanda. Refleja la escasez o abundancia energética del país y es clave para las señales económicas del mercado.',
         'descripcion_practica': 'Costo marginal del sistema eléctrico colombiano expresado en pesos por kWh. Se determina por el costo de la planta más costosa que debe operar para atender la demanda. Refleja la escasez o abundancia energética del país y es clave para las señales económicas del mercado.',
         'unidad': 'COP$/kWh',
+        'frecuencia': 'Horaria',
+        'criticidad': 'Alta',
         'uso_directo': 'El MME lo utiliza para: 1) Diseñar esquemas tarifarios y políticas de subsidios, 2) Evaluar la necesidad de declarar emergencias energéticas, 3) Establecer señales para nuevas inversiones en generación, 4) Monitorear la competitividad del mercado',
         'valor_critico': 'Precio de escasez: 446.26 $/kWh (2025). Valores >300 $/kWh indican tensión del sistema.',
+        'aplicaciones': ['Diseño tarifario', 'Políticas de subsidios', 'Evaluación de emergencias', 'Señales de inversión'],
         'categoria': 'precio'
     },
     'ReseAmb': {
         'nombre': 'Reservas Ambientales',
+        'descripcion': 'Volumen de agua almacenado en los embalses del SIN disponible para generación hidroeléctrica. Medido como porcentaje de la capacidad útil total. Es el indicador clave para prevenir crisis energéticas y gestionar restricciones ambientales.',
         'descripcion_practica': 'Volumen de agua almacenado en los embalses del SIN disponible para generación hidroeléctrica. Medido como porcentaje de la capacidad útil total. Es el indicador clave para prevenir crisis energéticas y gestionar restricciones ambientales.',
         'unidad': '%',
+        'frecuencia': 'Diaria',
+        'criticidad': 'Alta',
         'uso_directo': 'El MME lo utiliza para: 1) Activar alertas y planes de emergencia energética, 2) Coordinar con autoridades ambientales restricciones de uso del agua, 3) Declarar fenómenos El Niño/La Niña, 4) Planificar estrategias de ahorro y uso eficiente',
         'valor_critico': 'Alerta Amarilla: <30%, Alerta Naranja: <20%, Emergencia: <15%. Nivel crítico histórico: 28% (Fenómeno El Niño 2016).',
+        'aplicaciones': ['Alertas de emergencia', 'Coordinación con autoridades ambientales', 'Declaración de fenómenos climáticos', 'Estrategias de ahorro'],
         'categoria': 'reserva'
     }
 }

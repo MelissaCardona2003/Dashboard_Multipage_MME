@@ -27,8 +27,10 @@ except ImportError:
 # Imports locales
 from utils.components import crear_header, crear_navbar, crear_sidebar_universal, crear_boton_regresar
 from utils.config import COLORS
-from utils._xm import get_objetoAPI
+from utils._xm import get_objetoAPI, fetch_metric_data, obtener_datos_inteligente
+import logging
 
+logger = logging.getLogger(__name__)
 warnings.filterwarnings("ignore")
 
 register_page(
@@ -42,14 +44,13 @@ register_page(
 def obtener_listado_agentes():
     """Obtener el listado de agentes del sistema"""
     try:
-        objetoAPI = get_objetoAPI()
-        if objetoAPI is None:
-            print("API no disponible - retornando DataFrame vacío")
-            return pd.DataFrame()
-        
         fecha_fin = date.today() - timedelta(days=1)
         fecha_inicio = fecha_fin - timedelta(days=7)
-        agentes = objetoAPI.request_data("ListadoAgentes", "Sistema", fecha_inicio, fecha_fin)
+        
+        # ✅ OPTIMIZADO: Usar fetch_metric_data con cache
+        agentes = fetch_metric_data("ListadoAgentes", "Sistema", 
+                                     fecha_inicio.strftime('%Y-%m-%d'), 
+                                     fecha_fin.strftime('%Y-%m-%d'))
         
         if agentes is not None and not agentes.empty:
             # Filtrar solo agentes activos
@@ -66,12 +67,13 @@ def obtener_listado_agentes():
 def obtener_demanda_comercial(fecha_inicio, fecha_fin, codigos_agentes=None):
     """Obtener datos de demanda comercial (DemaCome) por agente"""
     try:
-        objetoAPI = get_objetoAPI()
-        if objetoAPI is None:
-            return pd.DataFrame()
-        
-        # Obtener DemaCome por Agente
-        df = objetoAPI.request_data('DemaCome', 'Agente', fecha_inicio, fecha_fin)
+        # ✅ OPTIMIZADO: Consulta inteligente SQLite (>=2020) vs API (<2020)
+        # La conversión kWh→GWh se hace después del filtrado
+        df, warning_msg = obtener_datos_inteligente('DemaCome', 'Agente', 
+                               fecha_inicio.strftime('%Y-%m-%d') if hasattr(fecha_inicio, 'strftime') else fecha_inicio,
+                               fecha_fin.strftime('%Y-%m-%d') if hasattr(fecha_fin, 'strftime') else fecha_fin)
+        if warning_msg:
+            logger.info(f"⚠️ {warning_msg}")
         
         if df is None or df.empty:
             print("No se obtuvieron datos de DemaCome")
@@ -79,26 +81,6 @@ def obtener_demanda_comercial(fecha_inicio, fecha_fin, codigos_agentes=None):
         
         # Filtrar por códigos si se proporcionan
         if codigos_agentes:
-            import sys
-            sys.stderr.write(f"🔍 COLUMNAS DISPONIBLES: {df.columns.tolist()}\n")
-            sys.stderr.write(f"🔍 FILTRANDO por agentes: {codigos_agentes}\n")
-            sys.stderr.write(f"🔍 Registros antes del filtro: {len(df)}\n")
-            sys.stderr.flush()
-            
-            # Buscar la columna correcta (puede ser Values_code o Values_Code)
-            code_column = None
-            if 'Values_code' in df.columns:
-                code_column = 'Values_code'
-            elif 'Values_Code' in df.columns:
-                code_column = 'Values_Code'
-            
-            if code_column:
-                df = df[df[code_column].isin(codigos_agentes)].copy()
-                sys.stderr.write(f"✅ Registros después del filtro: {len(df)}\n")
-                sys.stderr.flush()
-            else:
-                sys.stderr.write(f"❌ No se encontró columna de código\n")
-                sys.stderr.flush()
             import sys
             sys.stderr.write(f"🔍 COLUMNAS DISPONIBLES: {df.columns.tolist()}\n")
             sys.stderr.write(f"🔍 FILTRANDO por agentes: {codigos_agentes}\n")
@@ -133,12 +115,11 @@ def obtener_demanda_comercial(fecha_inicio, fecha_fin, codigos_agentes=None):
 def obtener_demanda_real(fecha_inicio, fecha_fin, codigos_agentes=None):
     """Obtener datos de demanda real por agente"""
     try:
-        objetoAPI = get_objetoAPI()
-        if objetoAPI is None:
-            return pd.DataFrame()
-        
-        # Obtener DemaReal por Agente
-        df = objetoAPI.request_data('DemaReal', 'Agente', fecha_inicio, fecha_fin)
+        # ✅ OPTIMIZADO: Usar fetch_metric_data con cache
+        # La conversión kWh→GWh se hace después del filtrado
+        df = fetch_metric_data('DemaReal', 'Agente', 
+                               fecha_inicio.strftime('%Y-%m-%d') if hasattr(fecha_inicio, 'strftime') else fecha_inicio,
+                               fecha_fin.strftime('%Y-%m-%d') if hasattr(fecha_fin, 'strftime') else fecha_fin)
         
         if df is None or df.empty:
             print("No se obtuvieron datos de DemaReal")
@@ -146,26 +127,6 @@ def obtener_demanda_real(fecha_inicio, fecha_fin, codigos_agentes=None):
         
         # Filtrar por códigos si se proporcionan
         if codigos_agentes:
-            import sys
-            sys.stderr.write(f"🔍 COLUMNAS DISPONIBLES: {df.columns.tolist()}\n")
-            sys.stderr.write(f"🔍 FILTRANDO por agentes: {codigos_agentes}\n")
-            sys.stderr.write(f"🔍 Registros antes del filtro: {len(df)}\n")
-            sys.stderr.flush()
-            
-            # Buscar la columna correcta (puede ser Values_code o Values_Code)
-            code_column = None
-            if 'Values_code' in df.columns:
-                code_column = 'Values_code'
-            elif 'Values_Code' in df.columns:
-                code_column = 'Values_Code'
-            
-            if code_column:
-                df = df[df[code_column].isin(codigos_agentes)].copy()
-                sys.stderr.write(f"✅ Registros después del filtro: {len(df)}\n")
-                sys.stderr.flush()
-            else:
-                sys.stderr.write(f"❌ No se encontró columna de código\n")
-                sys.stderr.flush()
             import sys
             sys.stderr.write(f"🔍 COLUMNAS DISPONIBLES: {df.columns.tolist()}\n")
             sys.stderr.write(f"🔍 FILTRANDO por agentes: {codigos_agentes}\n")
@@ -236,12 +197,10 @@ def procesar_datos_horarios(df, tipo_metrica):
 def obtener_demanda_no_atendida(fecha_inicio, fecha_fin):
     """Obtener datos de Demanda No Atendida Programada por Área"""
     try:
-        objetoAPI = get_objetoAPI()
-        if objetoAPI is None:
-            return pd.DataFrame()
-        
-        # Obtener DemaNoAtenProg por Area
-        df = objetoAPI.request_data('DemaNoAtenProg', 'Area', fecha_inicio, fecha_fin)
+        # ✅ OPTIMIZADO: Usar fetch_metric_data con cache
+        df = fetch_metric_data('DemaNoAtenProg', 'Area', 
+                               fecha_inicio.strftime('%Y-%m-%d') if hasattr(fecha_inicio, 'strftime') else fecha_inicio,
+                               fecha_fin.strftime('%Y-%m-%d') if hasattr(fecha_fin, 'strftime') else fecha_fin)
         
         if df is None or df.empty:
             print("No se obtuvieron datos de Demanda No Atendida")

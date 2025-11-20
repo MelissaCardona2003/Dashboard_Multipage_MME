@@ -1,6 +1,12 @@
 """
 Sistema de caché centralizado para optimizar la aplicación
 Evita recalcular los mismos datos cada vez que se recarga la página
+
+MEJORAS v2.0:
+- Cache persistente en /var/cache (no se borra en reboot)
+- Metadata JSON para búsquedas eficientes
+- Validación automática de corrupción
+- Limpieza automática de cache expirado
 """
 import logging
 import pandas as pd
@@ -9,10 +15,40 @@ from functools import wraps
 import pickle
 import os
 import hashlib
+import json
 
-# Directorio para almacenar cache en disco
-CACHE_DIR = "/tmp/portal_energetico_cache"
-os.makedirs(CACHE_DIR, exist_ok=True)
+# Directorio PERSISTENTE para almacenar cache en disco
+# Prioridad: /var/cache > /home/user/.cache > /tmp (fallback)
+def get_cache_directory():
+    """Determinar mejor directorio para cache (persistente si es posible)"""
+    options = [
+        '/var/cache/portal_energetico_cache',
+        os.path.expanduser('~/.cache/portal_energetico_cache'),
+        '/tmp/portal_energetico_cache'
+    ]
+    
+    for cache_dir in options:
+        try:
+            os.makedirs(cache_dir, exist_ok=True)
+            # Test write permission
+            test_file = os.path.join(cache_dir, '.test_write')
+            with open(test_file, 'w') as f:
+                f.write('test')
+            os.remove(test_file)
+            logging.info(f"✅ Cache directory: {cache_dir}")
+            return cache_dir
+        except (PermissionError, OSError):
+            continue
+    
+    # Fallback extremo
+    logging.warning("⚠️ No se pudo crear directorio persistente, usando /tmp")
+    fallback = '/tmp/portal_energetico_cache'
+    os.makedirs(fallback, exist_ok=True)
+    return fallback
+
+CACHE_DIR = get_cache_directory()
+METADATA_DIR = os.path.join(CACHE_DIR, 'metadata')
+os.makedirs(METADATA_DIR, exist_ok=True)
 
 # Cache en memoria (más rápido)
 _memory_cache = {}
@@ -31,11 +67,61 @@ CACHE_EXPIRATION = {
 }
 
 def get_cache_key(prefix, *args, **kwargs):
-    """Generar una clave única para el cache basada en los parámetros"""
-    # Combinar todos los argumentos en una cadena
+    """
+    Generar clave única para cache basada en métrica/entidad/mes
+    
+    REDISEÑO v2.0 (2025-11-19):
+    - Cache por métrica/entidad/MES (no fecha exacta)
+    - Precalentamiento y dashboard usan MISMO cache_key
+    - Fechas se agrupan por mes para reducir fragmentación
+    
+    Ejemplos:
+        get_cache_key('fetch_metric_data', 'Gene', 'Sistema', '2025-11-15', '2025-11-15')
+        → fetch_metric_data_Gene_Sistema_2025-11
+        
+        get_cache_key('fetch_metric_data', 'Gene', 'Sistema', '2025-11-01', '2025-11-30')
+        → fetch_metric_data_Gene_Sistema_2025-11
+        
+        ✅ Ambos retornan la MISMA clave → cache compartido
+    """
+    # Combinar prefix + args (excepto fechas)
     key_parts = [prefix]
-    key_parts.extend([str(arg) for arg in args])
-    key_parts.extend([f"{k}={v}" for k, v in sorted(kwargs.items())])
+    
+    # Detectar si hay fechas en los argumentos
+    fecha_inicio = None
+    fecha_fin = None
+    non_date_args = []
+    
+    for arg in args:
+        arg_str = str(arg)
+        # Detectar formato YYYY-MM-DD
+        if len(arg_str) == 10 and arg_str[4] == '-' and arg_str[7] == '-':
+            if fecha_inicio is None:
+                fecha_inicio = arg_str
+            else:
+                fecha_fin = arg_str
+        else:
+            non_date_args.append(arg_str)
+    
+    # Agregar args no-fecha a la clave
+    key_parts.extend(non_date_args)
+    
+    # Agregar MES de la fecha (no fecha exacta)
+    # ✅ REVERTIDO a v2.1: Usar fecha_FIN para evitar mes diferente
+    # Precalentamiento: 2025-11-01 a 2025-11-18 → mes_key = 2025-11
+    # Dashboard:        2025-10-19 a 2025-11-18 → mes_key = 2025-11
+    # ✅ Ambos tienen el mismo fecha_fin → mismo mes_key
+    if fecha_fin:
+        mes_key = fecha_fin[:7]  # 'YYYY-MM'
+        key_parts.append(mes_key)
+    elif fecha_inicio:
+        mes_key = fecha_inicio[:7]  # Fallback si solo hay fecha_inicio
+        key_parts.append(mes_key)
+    
+    # Agregar kwargs (excepto fechas)
+    for k, v in sorted(kwargs.items()):
+        if k not in ['start_date', 'end_date', 'fecha_inicio', 'fecha_fin']:
+            key_parts.append(f"{k}={v}")
     
     # Crear hash MD5 para claves largas
     key_string = "|".join(key_parts)
@@ -62,14 +148,17 @@ def get_from_cache(cache_key, allow_expired=False, max_age_days=7):
         if datetime.now() < expiration_time:
             logging.info(f"Cache HIT (memoria): {cache_key}")
             return cached_data
-        elif allow_expired and age_days <= max_age_days:
-            logging.warning(f"⚡ Cache EXPIRADO ({age_days}d) pero ACEPTABLE (memoria): {cache_key}")
-            return cached_data
-        else:
-            if allow_expired:
-                logging.info(f"Cache MUY VIEJO ({age_days}d > {max_age_days}d) - descartado (memoria)")
+        elif allow_expired:
+            # Si allow_expired=True, SIEMPRE aceptar cache sin importar antigüedad
+            if age_days <= max_age_days:
+                logging.warning(f"⚡ Cache EXPIRADO ({age_days}d) pero ACEPTABLE (memoria): {cache_key}")
+                return cached_data
             else:
-                logging.info(f"Cache EXPIRED (memoria): {cache_key}")
+                logging.info(f"Cache MUY VIEJO ({age_days}d > {max_age_days}d) - descartado (memoria)")
+                del _memory_cache[cache_key]
+        else:
+            # Solo eliminar si allow_expired=False
+            logging.info(f"Cache EXPIRED (memoria): {cache_key}")
             del _memory_cache[cache_key]
     
     # Intentar cache en disco
@@ -97,16 +186,20 @@ def get_from_cache(cache_key, allow_expired=False, max_age_days=7):
                 # Cargar en memoria para siguiente acceso
                 _memory_cache[cache_key] = (cached_data, expiration_time)
                 return cached_data
-            elif allow_expired and age_days <= max_age_days:
-                logging.warning(f"⚡ Cache EXPIRADO ({age_days}d) pero ACEPTABLE (disco): {cache_key}")
-                # Cargar en memoria también
-                _memory_cache[cache_key] = (cached_data, expiration_time)
-                return cached_data
-            else:
-                if allow_expired:
-                    logging.info(f"Cache MUY VIEJO ({age_days}d > {max_age_days}d) - eliminado (disco)")
+            elif allow_expired:
+                # Si allow_expired=True, SIEMPRE aceptar cache sin importar antigüedad
+                # (a menos que sea extremadamente viejo y max_age_days esté definido)
+                if age_days <= max_age_days:
+                    logging.warning(f"⚡ Cache EXPIRADO ({age_days}d) pero ACEPTABLE (disco): {cache_key}")
+                    # Cargar en memoria también
+                    _memory_cache[cache_key] = (cached_data, expiration_time)
+                    return cached_data
                 else:
-                    logging.info(f"Cache EXPIRED (disco): {cache_key}")
+                    logging.info(f"Cache MUY VIEJO ({age_days}d > {max_age_days}d) - eliminado (disco)")
+                    os.remove(cache_file)
+            else:
+                # Solo eliminar si allow_expired=False
+                logging.info(f"Cache EXPIRED (disco): {cache_key}")
                 os.remove(cache_file)
         except (pickle.UnpicklingError, EOFError, AttributeError) as e:
             logging.error(f"🚨 CACHE CORRUPTO (pickle): {cache_key} - {e} - ELIMINANDO")
@@ -214,16 +307,17 @@ def _validate_cache_structure(df, metric, entity):
         return False
     
     # Definir columnas requeridas por métrica/entidad
+    # NOTA: Gene puede venir con 'Value' O con 'Values_Hour01...24' dependiendo de agregación
     REQUIRED_COLUMNS = {
         'ListadoEmbalses': ['Values_Name', 'Values_Code', 'Values_HydroRegion'],
         'ListadoAgentes': ['Values_Code', 'Values_Name'],
-        'Gene': ['Date', 'Value'],
-        'AporEner': ['Date', 'Value', 'Name'],
-        'AporEnerMediHist': ['Date', 'Value', 'Name'],
+        'Gene': ['Date'],  # Gene puede tener Value o Values_Hour*, ambos válidos
+        'AporEner': ['Date'],  # Flexible: puede tener Value o Values_*
+        'AporEnerMediHist': ['Date'],  # Flexible
         'DemaCome': ['Date', 'Values_code'],
         'DemaReal': ['Date', 'Values_code'],
-        'VoluUtilDiarEner': ['Date', 'Value'],
-        'CapaUtilDiarEner': ['Date', 'Value'],
+        'VoluUtilDiarEner': ['Date'],  # Flexible
+        'CapaUtilDiarEner': ['Date'],  # Flexible
     }
     
     # Verificar si tenemos columnas requeridas para esta métrica
@@ -276,16 +370,14 @@ def find_any_cache_for_metric(prefix, metric, entity):
     for cache_key in list(_memory_cache.keys()):
         if cache_key.startswith(pattern):
             try:
-                # VALIDACIÓN: verificar que el cache_key contenga la métrica y entidad
-                if metric.lower() in cache_key.lower() and entity.lower() in cache_key.lower():
-                    cached_data, expiration_time = _memory_cache[cache_key]
-                    if isinstance(cached_data, pd.DataFrame) and not cached_data.empty:
-                        # Validar que el DataFrame tenga las columnas esperadas según la métrica
-                        if _validate_cache_structure(cached_data, metric, entity):
-                            logging.info(f"✅ Cache VÁLIDO en MEMORIA: {cache_key[:60]}...")
-                            return cached_data
-                        else:
-                            logging.warning(f"⚠️ Cache en memoria tiene estructura incorrecta: {cache_key[:60]}")
+                # NO VALIDAR POR CACHE_KEY (son MD5 hashes)
+                # La validación real se hace verificando estructura del DataFrame
+                cached_data, expiration_time = _memory_cache[cache_key]
+                if isinstance(cached_data, pd.DataFrame) and not cached_data.empty:
+                    # Validar que el DataFrame tenga las columnas esperadas según la métrica
+                    if _validate_cache_structure(cached_data, metric, entity):
+                        logging.info(f"✅ Cache VÁLIDO en MEMORIA: {cache_key[:60]}...")
+                        return cached_data
             except Exception as e:
                 logging.error(f"Error validando cache en memoria: {e}")
                 continue
@@ -298,9 +390,8 @@ def find_any_cache_for_metric(prefix, metric, entity):
             # Ordenar por fecha de modificación (más reciente primero)
             cache_files.sort(key=lambda x: os.path.getmtime(os.path.join(CACHE_DIR, x)), reverse=True)
             for filename in cache_files:
-                # VALIDACIÓN: verificar que el filename contenga la métrica y entidad
-                if metric.lower() not in filename.lower() or entity.lower() not in filename.lower():
-                    continue  # Skip cache que no corresponde a esta métrica/entidad
+                # NO VALIDAR POR FILENAME (son MD5 hashes)
+                # La validación real se hace leyendo el DataFrame y verificando estructura
                 
                 cache_file = os.path.join(CACHE_DIR, filename)
                 try:
@@ -324,8 +415,26 @@ def find_any_cache_for_metric(prefix, metric, entity):
     logging.info(f"❌ No se encontró ningún cache VÁLIDO para {metric}/{entity}")
     return None
 
-def save_to_cache(cache_key, data, cache_type='default', metric_name=None):
-    """Guardar dato en cache (memoria y disco) con validaciones anti-corrupción"""
+def save_to_cache(cache_key, data, cache_type='default', metric_name=None, units_converted=False):
+    """
+    Guardar dato en cache (memoria y disco) con validaciones anti-corrupción
+    
+    MEJORAS v2.0:
+    - Metadata JSON para búsquedas rápidas
+    - Validación exhaustiva antes de guardar
+    - Checksum para detectar corrupción
+    
+    MEJORAS v2.1 (2025-11-18):
+    - Parámetro units_converted para prevenir conversión doble
+    - Metadata indica si unidades ya fueron convertidas
+    
+    Args:
+        cache_key: Clave única del cache
+        data: DataFrame a cachear
+        cache_type: Tipo de cache para determinar expiración
+        metric_name: Nombre de la métrica (para validaciones)
+        units_converted: True si datos ya vienen convertidos (Wh→GWh, etc.)
+    """
     try:
         # VALIDACIÓN CRÍTICA: No guardar datos None o vacíos
         if data is None:
@@ -344,10 +453,12 @@ def save_to_cache(cache_key, data, cache_type='default', metric_name=None):
         # VALIDACIÓN DE UNIDADES: Prevenir caches con kWh en lugar de GWh
         if metric_name in ['AporEner', 'AporEnerMediHist'] and 'Value' in data.columns:
             promedio = data['Value'].mean()
-            if promedio > 1000:  # Valores en kWh, NO en GWh
-                logging.error(f"🚨 VALIDACIÓN FALLIDA: {metric_name} tiene valores en kWh (promedio={promedio:.0f})")
-                logging.error(f"🚨 Se esperaban valores en GWh. Cache NO guardado para prevenir error.")
-                logging.error(f"🚨 Verifique que la conversión kWh→GWh se aplique ANTES de guardar.")
+            # Aportes pueden ser grandes (200-300 GWh/día promedio en el mes)
+            # Umbral ajustado: >1,000,000 indica que NO se aplicó conversión MWh→GWh
+            if promedio > 1_000_000:  # Valores originales en MWh sin convertir
+                logging.error(f"🚨 VALIDACIÓN FALLIDA: {metric_name} tiene valores sin convertir (promedio={promedio:.0f})")
+                logging.error(f"🚨 Se esperaban valores en GWh (< 1M). Cache NO guardado para prevenir error.")
+                logging.error(f"🚨 Verifique que la conversión MWh→GWh (÷1000) se aplique ANTES de guardar.")
                 return
             elif promedio < 0.001 and promedio > 0:
                 logging.warning(f"⚠️ VALIDACIÓN SOSPECHOSA: {metric_name} tiene valores muy pequeños (promedio={promedio:.6f})")
@@ -361,19 +472,42 @@ def save_to_cache(cache_key, data, cache_type='default', metric_name=None):
         
         # Guardar en disco para persistencia
         cache_file = os.path.join(CACHE_DIR, f"{cache_key}.pkl")
+        metadata_file = os.path.join(METADATA_DIR, f"{cache_key}.json")
+        
         try:
+            # Guardar datos
             with open(cache_file, 'wb') as f:
                 pickle.dump((data, expiration_time), f)
             
-            # Log detallado del tamaño y contenido
-            size_kb = os.path.getsize(cache_file) / 1024
+            # Guardar metadata para búsquedas rápidas
             rows, cols = data.shape
-            logging.info(f"💾 Cache guardado: {cache_key} | {rows} filas × {cols} cols | {size_kb:.1f}KB | expira en {expiration}")
+            metadata = {
+                'cache_key': cache_key,
+                'metric_name': metric_name,
+                'created': datetime.now().isoformat(),
+                'expiration': expiration_time.isoformat(),
+                'rows': rows,
+                'columns': cols,
+                'column_names': list(data.columns),
+                'size_bytes': os.path.getsize(cache_file),
+                'checksum': hashlib.md5(pickle.dumps(data)).hexdigest(),
+                'units_converted': units_converted  # 🆕 Indica si ya se hizo conversión de unidades
+            }
+            
+            with open(metadata_file, 'w') as f:
+                json.dump(metadata, f, indent=2)
+            
+            # Log detallado del tamaño y contenido
+            size_kb = metadata['size_bytes'] / 1024
+            logging.info(f"💾 Cache guardado: {cache_key[:40]}... | {rows} filas × {cols} cols | {size_kb:.1f}KB | expira en {expiration}")
+            
         except Exception as e:
             logging.error(f"🚨 Error guardando cache en disco: {cache_key} - {e}")
             # Eliminar cache parcial si existe
             if os.path.exists(cache_file):
                 os.remove(cache_file)
+            if os.path.exists(metadata_file):
+                os.remove(metadata_file)
                 
     except Exception as e:
         logging.error(f"🚨 EXCEPCIÓN en save_to_cache: {cache_key} - {e}")

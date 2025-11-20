@@ -5,7 +5,7 @@ def get_plotly_modules():
     import plotly.graph_objects as go
     return px, go
 
-from dash import dcc, html, Input, Output, State, callback, register_page
+from dash import dcc, html, Input, Output, State, callback, register_page, dash
 import dash_table
 import plotly.express as px
 import dash_bootstrap_components as dbc
@@ -83,7 +83,7 @@ def format_date(date_value):
 
 
 # Inicializar API XM de forma perezosa usando el helper
-from utils._xm import get_objetoAPI, fetch_metric_data
+from utils._xm import get_objetoAPI, fetch_metric_data, obtener_datos_desde_sqlite, obtener_datos_inteligente, obtener_datos_inteligente
 API_STATUS = None
 
 # Verificar si la API está disponible al inicializar el módulo
@@ -279,20 +279,17 @@ def calcular_volumen_util_unificado(fecha, region=None, embalse=None):
     logger.debug(f"Calculando volumen útil - Fecha: {fecha}, Región: {region}, Embalse: {embalse}")
     
     try:
-        # Función para encontrar la fecha más reciente con datos
-        def encontrar_fecha_con_datos_unificada(fecha_inicial):
-            for dias_atras in range(7):  # Buscar hasta 7 días atrás
-                fecha_prueba = (datetime.strptime(fecha_inicial, '%Y-%m-%d') - timedelta(days=dias_atras)).strftime('%Y-%m-%d')
-                df_vol_test = fetch_metric_data('VoluUtilDiarEner', 'Embalse', fecha_prueba, fecha_prueba)
-                df_cap_test = fetch_metric_data('CapaUtilDiarEner', 'Embalse', fecha_prueba, fecha_prueba)
-                if (df_vol_test is not None and not df_vol_test.empty and 
-                    df_cap_test is not None and not df_cap_test.empty):
-                    logger.debug(f"Usando fecha con datos: {fecha_prueba}")
-                    return fecha_prueba, df_vol_test, df_cap_test
-            return None, None, None
-
-        # Buscar fecha con datos disponibles
-        fecha_final, df_vol, df_cap = encontrar_fecha_con_datos_unificada(fecha)
+        # Usar helper para buscar fecha con datos disponibles
+        fecha_obj = datetime.strptime(fecha, '%Y-%m-%d').date()
+        df_vol, fecha_vol = obtener_datos_desde_sqlite('VoluUtilDiarEner', 'Embalse', fecha_obj)
+        df_cap, fecha_cap = obtener_datos_desde_sqlite('CapaUtilDiarEner', 'Embalse', fecha_obj)
+        
+        # Verificar que ambos tienen datos de la misma fecha
+        if df_vol is not None and df_cap is not None and fecha_vol == fecha_cap:
+            fecha_final = fecha_vol.strftime('%Y-%m-%d')
+            logger.debug(f"Usando fecha con datos: {fecha_final}")
+        else:
+            df_vol, df_cap, fecha_final = None, None, None
 
         if df_vol is None or df_vol.empty or df_cap is None or df_cap.empty:
             logger.warning("No se pudieron obtener datos de la API para ninguna fecha reciente")
@@ -647,30 +644,20 @@ def obtener_datos_embalses_por_region():
         dict: {region: {embalses: [...], riesgo_max: str, color: str, lat: float, lon: float}}
     """
     try:
-        # Obtener fecha actual
+        # Obtener fecha actual y buscar últimos datos disponibles
         fecha_hoy = date.today()
         
-        # Buscar datos en los últimos 7 días
-        df_vol, df_cap, df_listado = None, None, None
-        for dias_atras in range(7):
-            fecha_busqueda = fecha_hoy - timedelta(days=dias_atras)
-            fecha_str = fecha_busqueda.strftime('%Y-%m-%d')
-            
-            # Obtener volumen, capacidad y listado de embalses
-            df_vol_temp = fetch_metric_data('VoluUtilDiarEner', 'Embalse', fecha_str, fecha_str)
-            df_cap_temp = fetch_metric_data('CapaUtilDiarEner', 'Embalse', fecha_str, fecha_str)
-            df_listado_temp = fetch_metric_data('ListadoEmbalses', 'Sistema', fecha_str, fecha_str)
-            
-            if (df_vol_temp is not None and not df_vol_temp.empty and 
-                df_cap_temp is not None and not df_cap_temp.empty and
-                df_listado_temp is not None and not df_listado_temp.empty):
-                df_vol = df_vol_temp
-                df_cap = df_cap_temp
-                df_listado = df_listado_temp
-                logger.info(f"Datos de embalses obtenidos para {fecha_str}")
-                break
+        # Usar helper para buscar datos en los últimos 7 días
+        df_vol, fecha_vol = obtener_datos_desde_sqlite('VoluUtilDiarEner', 'Embalse', fecha_hoy)
+        df_cap, fecha_cap = obtener_datos_desde_sqlite('CapaUtilDiarEner', 'Embalse', fecha_hoy)
+        df_listado, fecha_listado = obtener_datos_desde_sqlite('ListadoEmbalses', 'Sistema', fecha_hoy)
         
-        if df_vol is None or df_cap is None or df_listado is None:
+        # Verificar que todos tienen datos de la misma fecha
+        if (df_vol is not None and df_cap is not None and df_listado is not None and 
+            fecha_vol == fecha_cap == fecha_listado):
+            fecha_str = fecha_vol.strftime('%Y-%m-%d')
+            logger.info(f"Datos de embalses obtenidos para {fecha_str}")
+        else:
             logger.error("No se pudieron obtener datos de embalses")
             return None
         
@@ -1348,9 +1335,11 @@ def render_hidro_tab_content(active_tab):
                         html.P("Ajuste el rango de fechas y vuelva a intentar.", className="mb-0")
                     ], color="warning", className="text-start")
                 try:
-                    # OPTIMIZADO: Usar fetch_metric_data con cache + batching
-                    # ✅ La conversión kWh→GWh ahora se hace automáticamente en fetch_metric_data()
-                    data = fetch_metric_data('AporEner', 'Rio', start_date, end_date)
+                    # ✅ OPTIMIZADO: Consulta inteligente SQLite (>=2020) vs API (<2020)
+                    # La conversión kWh→GWh se hace automáticamente
+                    data, warning_msg = obtener_datos_inteligente('AporEner', 'Rio', start_date, end_date)
+                    if warning_msg:
+                        logger.info(f"⚠️ {warning_msg}")
                     
                     if data is None or data.empty:
                         return dbc.Alert([
@@ -1814,9 +1803,11 @@ def update_content(n_clicks, rio, start_date, end_date, region):
             ], color="warning", className="text-start")
         
         try:
-            # OPTIMIZADO: Usar fetch_metric_data con cache + batching
-            # ✅ La conversión kWh→GWh ahora se hace automáticamente en fetch_metric_data()
-            data = fetch_metric_data('AporEner', 'Rio', start_date, end_date)
+            # ✅ OPTIMIZADO: Consulta inteligente SQLite (>=2020) vs API (<2020)
+            # La conversión kWh→GWh se hace automáticamente
+            data, warning_msg = obtener_datos_inteligente('AporEner', 'Rio', start_date, end_date)
+            if warning_msg:
+                logger.info(f"⚠️ {warning_msg}")
             
             if data is None or data.empty:
                 return dbc.Alert([
@@ -1833,7 +1824,7 @@ def update_content(n_clicks, rio, start_date, end_date, region):
                 total_real = daily_totals_real['Value'].sum()  # SUMA TOTAL, no promedio
                 
                 # Obtener media histórica y agrupar por fecha
-                media_hist_data = fetch_metric_data('AporEnerMediHist', 'Rio', start_date, end_date)
+                media_hist_data, _ = obtener_datos_inteligente('AporEnerMediHist', 'Rio', start_date, end_date)
                 if media_hist_data is not None and not media_hist_data.empty:
                     # Agrupar media histórica por fecha y sumar
                     daily_totals_hist = media_hist_data.groupby('Date')['Value'].sum().reset_index()
@@ -1855,7 +1846,7 @@ def update_content(n_clicks, rio, start_date, end_date, region):
                 fecha_embalse = end_date
                 regiones_totales, df_completo_embalses = get_tabla_regiones_embalses(fecha_embalse, fecha_embalse)
                 return html.Div([
-                    html.H5("🇨🇴 Contribución Energética por Región Hidrológica de Colombia", className="text-center mb-2"),
+                    html.H5("💧 Estado Promedio de las Hidroeléctricas en el 2025", className="text-center mb-2"),
                     
                     # Ficha KPI destacada con el porcentaje vs histórico
                     dbc.Row([
@@ -1876,7 +1867,11 @@ def update_content(n_clicks, rio, start_date, end_date, region):
                                                 else "Condiciones más secas que el promedio histórico" if porcentaje_vs_historico < 90
                                                 else "Condiciones cercanas al promedio histórico"
                                             ) or ""
-                                        ], className="small mb-0", style={"fontSize": "0.85rem"})
+                                        ], className="small mb-1", style={"fontSize": "0.85rem"}),
+                                        html.P([
+                                            html.I(className="fas fa-calendar-alt me-1", style={"fontSize": "0.7rem"}),
+                                            html.Span("Media histórica: 1995-2024", className="text-muted", style={"fontSize": "0.75rem", "fontStyle": "italic"})
+                                        ], className="mb-0")
                                     ], className="text-center")
                                 ], className="py-3")
                             ], className="shadow-sm border-0", style={"borderLeft": "4px solid " + (
@@ -1887,114 +1882,161 @@ def update_content(n_clicks, rio, start_date, end_date, region):
                         ], md=12, className="mb-3")
                     ]) if porcentaje_vs_historico is not None else html.Div(),
                     
-                    # Guía simplificada
-                    dbc.Alert([
-                        html.Div([
-                            html.Strong("📊 Línea negra: ", className="text-dark"),
-                            html.Span("Aportes reales del período seleccionado", className="small")
-                        ], className="mb-2"),
-                        html.Div([
-                            html.Strong("📈 Línea punteada coloreada: ", className="text-primary"),
-                            html.Span("Media histórica con color dinámico: ", className="small"),
-                            html.Span("🟢 Verde = Húmedo (>100%), ", className="small", style={"color": "#28a745", "fontWeight": "bold"}),
-                            html.Span("🔵 Cyan = Normal (90-100%), ", className="small", style={"color": "#17a2b8", "fontWeight": "bold"}),
-                            html.Span("🟡 Amarillo = Moderadamente seco (70-90%), ", className="small", style={"color": "#ffc107", "fontWeight": "bold"}),
-                            html.Span("🔴 Rojo = Muy seco (<70%)", className="small", style={"color": "#dc3545", "fontWeight": "bold"})
-                        ], className="mb-2"),
-                        html.Hr(className="my-2"),
-                        html.Div([
-                            html.I(className="bi bi-cursor-fill me-2"),
-                            html.Span("Haz clic en cualquier punto para ver detalles por región", className="small text-muted fst-italic")
-                        ])
-                    ], color="light", className="mb-3", style={"padding": "1rem"}),
-                    html.P("Vista panorámica nacional: Series temporales comparativas de aportes de energía por región hidrológica. Haga clic en cualquier punto para ver el detalle agregado diario de la región. Los datos están expresados en GWh (gigavatios-hora) e incluyen todos los ríos monitoreados en el período seleccionado, agrupados por región para análisis comparativo nacional.", className="text-center text-muted mb-3", style={"fontSize": "0.9rem"}),
+                    # Descripción actualizada y concisa
+                    html.H5("🇨🇴 Contribución Energética por Región Hidrológica de Colombia", className="text-center mb-2 mt-3"),
+                    html.P("Series temporales de aportes hidroeléctricos por región. Los datos muestran la evolución diaria de la generación hídrica expresada en GWh (gigavatios-hora), comparada con la media histórica. Haga clic en cualquier punto de la gráfica para ver el detalle agregado por región.", 
+                          className="text-center text-muted mb-3", style={"fontSize": "0.9rem"}),
                     
-                    dbc.Row([
-                        dbc.Col([
+                    # Card con la gráfica temporal y guía colapsable
+                    dbc.Card([
+                        dbc.CardBody([
+                            # Botón colapsable para la guía de lectura
+                            dbc.Button(
+                                [
+                                    html.I(className="fas fa-chart-line me-2"),
+                                    html.Span("Ver guía de lectura de la gráfica", id="guia-grafica-button-text"),
+                                    html.I(className="fas fa-chevron-down ms-2", id="guia-grafica-chevron")
+                                ],
+                                id="toggle-guia-grafica",
+                                color="secondary",
+                                outline=True,
+                                size="sm",
+                                className="mb-3 w-100",
+                                style={"fontSize": "0.85rem"}
+                            ),
+                            
+                            # Contenido colapsable de la guía
+                            dbc.Collapse(
+                                dbc.Alert([
+                                    html.Div([
+                                        html.Strong("📊 Línea negra: ", className="text-dark"),
+                                        html.Span("Aportes reales del período seleccionado", className="small")
+                                    ], className="mb-2"),
+                                    html.Div([
+                                        html.Strong("📈 Línea punteada coloreada: ", className="text-primary"),
+                                        html.Span("Media histórica con color dinámico: ", className="small"),
+                                        html.Span("🟢 Verde = Húmedo (>100%), ", className="small", style={"color": "#28a745", "fontWeight": "bold"}),
+                                        html.Span("🔵 Cyan = Normal (90-100%), ", className="small", style={"color": "#17a2b8", "fontWeight": "bold"}),
+                                        html.Span("🟡 Amarillo = Moderadamente seco (70-90%), ", className="small", style={"color": "#ffc107", "fontWeight": "bold"}),
+                                        html.Span("🔴 Rojo = Muy seco (<70%)", className="small", style={"color": "#dc3545", "fontWeight": "bold"})
+                                    ], className="mb-2"),
+                                    html.Hr(className="my-2"),
+                                    html.Div([
+                                        html.I(className="bi bi-cursor-fill me-2"),
+                                        html.Span("Haz clic en cualquier punto para ver detalles por región", className="small text-muted fst-italic")
+                                    ])
+                                ], color="light", className="mb-3", style={"padding": "0.75rem"}),
+                                id="collapse-guia-grafica",
+                                is_open=False
+                            ),
+                            
+                            # Gráfica temporal
                             create_total_timeline_chart(data, "Aportes totales nacionales")
-                        ], md=12)
-                    ]),
+                        ])
+                    ], className="mb-3"),
                     dcc.Store(id="region-data-store", data=data.to_dict('records')),
                     dcc.Store(id="embalses-completo-data", data=df_completo_embalses.to_dict('records')),
                     html.Hr(),
                     html.H5("⚡ Capacidad Útil Diaria de Energía por Región Hidrológica", className="text-center mt-4 mb-2"),
                     html.P("📋 Interfaz jerárquica expandible: Haga clic en cualquier región para desplegar sus embalses. Cada región muestra dos tablas lado a lado con participación porcentual y capacidad detallada en GWh. Los datos están ordenados de mayor a menor valor. Los símbolos ⊞ indican regiones contraídas y ⊟ regiones expandidas.", className="text-center text-muted mb-3", style={"fontSize": "0.9rem"}),
                     
-                    # Leyenda del Sistema de Semáforo
+                    # Botón para expandir/colapsar Sistema de Semáforo
                     dbc.Row([
                         dbc.Col([
-                            dbc.Alert([
-                                html.H6([
+                            dbc.Button(
+                                [
                                     html.I(className="fas fa-traffic-light me-2"),
-                                    "🚦 Sistema Inteligente de Semáforo de Riesgo Hidrológico"
-                                ], className="alert-heading mb-3"),
-                                html.P("Este sistema analiza automáticamente cada embalse combinando dos factores críticos para determinar su nivel de riesgo operativo:", className="mb-3", style={"fontSize": "0.95rem"}),
-                                
-                                # Explicación de los factores
-                                dbc.Row([
-                                    dbc.Col([
-                                        html.Div([
-                                            html.H6("📊 Factor 1: Importancia Estratégica", className="text-primary mb-2"),
-                                            html.P("Participación del embalse en el sistema energético nacional. Los embalses con mayor participación (>10%) son considerados estratégicos para la estabilidad del sistema.", 
-                                                  className="mb-2", style={"fontSize": "0.85rem"})
-                                        ])
-                                    ], md=6),
-                                    dbc.Col([
-                                        html.Div([
-                                            html.H6("💧 Factor 2: Disponibilidad Hídrica", className="text-info mb-2"),
-                                            html.P("Porcentaje de volumen útil disponible. Indica cuánta agua tiene el embalse por encima de su nivel mínimo técnico para generar energía.", 
-                                                  className="mb-2", style={"fontSize": "0.85rem"})
-                                        ])
-                                    ], md=6)
-                                ], className="mb-3"),
-                                
-                                html.Hr(),
-                                html.H6("🎯 Lógica de Clasificación de Riesgo:", className="mb-2"),
-                                dbc.Row([
-                                    dbc.Col([
-                                        html.Div([
-                                            html.Span("🔴 RIESGO ALTO", className="fw-bold", style={"color": "#dc3545", "fontSize": "1rem"}),
-                                            html.Br(),
-                                            html.Small("Embalses estratégicos (participación ≥10%) con volumen crítico (<30%)", 
-                                                     className="text-muted", style={"fontSize": "0.8rem"}),
-                                            html.Br(),
-                                            html.Small("⚠️ Requiere atención inmediata - Riesgo de desabastecimiento", 
-                                                     className="text-danger", style={"fontSize": "0.75rem", "fontWeight": "bold"})
-                                        ], className="p-2 border-start border-danger border-3")
-                                    ], md=4),
-                                    dbc.Col([
-                                        html.Div([
-                                            html.Span("🟡 RIESGO MEDIO", className="fw-bold", style={"color": "#ffc107", "fontSize": "1rem"}),
-                                            html.Br(),
-                                            html.Small("Embalses estratégicos con volumen bajo (30-70%) o embalses pequeños con volumen crítico", 
-                                                     className="text-muted", style={"fontSize": "0.8rem"}),
-                                            html.Br(),
-                                            html.Small("⚡ Monitoreo continuo - Situación de precaución", 
-                                                     className="text-warning", style={"fontSize": "0.75rem", "fontWeight": "bold"})
-                                        ], className="p-2 border-start border-warning border-3")
-                                    ], md=4),
-                                    dbc.Col([
-                                        html.Div([
-                                            html.Span("🟢 RIESGO BAJO", className="fw-bold", style={"color": "#198754", "fontSize": "1rem"}),
-                                            html.Br(),
-                                            html.Small("Embalses con volumen adecuado (≥70%) independientemente de su tamaño", 
-                                                     className="text-muted", style={"fontSize": "0.8rem"}),
-                                            html.Br(),
-                                            html.Small("✅ Situación estable - Operación normal", 
-                                                     className="text-success", style={"fontSize": "0.75rem", "fontWeight": "bold"})
-                                        ], className="p-2 border-start border-success border-3")
-                                    ], md=4)
-                                ], className="mb-3"),
-                                
-                                html.Hr(),
-                                html.Div([
-                                    html.Strong("💡 Nota Técnica: ", className="text-primary"),
-                                    html.Span("El sistema prioriza la seguridad energética nacional. Un embalse pequeño con bajo volumen puede ser menos crítico que un embalse estratégico en la misma condición.", 
-                                             style={"fontSize": "0.85rem"})
-                                ], className="bg-light p-2 rounded")
-                            ], color="info", className="mb-3")
+                                    html.Span("Ver información detallada del Sistema Semáforo de Riesgo Hidrológico", id="semaforo-button-text"),
+                                    html.I(className="fas fa-chevron-down ms-2", id="semaforo-chevron")
+                                ],
+                                id="toggle-semaforo-info",
+                                color="info",
+                                outline=True,
+                                className="mb-3 w-100",
+                                style={"fontSize": "0.95rem", "fontWeight": "500"}
+                            )
                         ], md=12)
                     ]),
+                    
+                    # Contenido colapsable del Sistema de Semáforo
+                    dbc.Collapse(
+                        dbc.Row([
+                            dbc.Col([
+                                dbc.Alert([
+                                    html.H6([
+                                        html.I(className="fas fa-traffic-light me-2"),
+                                        "🚦 Sistema Inteligente de Semáforo de Riesgo Hidrológico"
+                                    ], className="alert-heading mb-3"),
+                                    html.P("Este sistema analiza automáticamente cada embalse combinando dos factores críticos para determinar su nivel de riesgo operativo:", className="mb-3", style={"fontSize": "0.95rem"}),
+                                    
+                                    # Explicación de los factores
+                                    dbc.Row([
+                                        dbc.Col([
+                                            html.Div([
+                                                html.H6("📊 Factor 1: Importancia Estratégica", className="text-primary mb-2"),
+                                                html.P("Participación del embalse en el sistema energético nacional. Los embalses con mayor participación (>10%) son considerados estratégicos para la estabilidad del sistema.", 
+                                                      className="mb-2", style={"fontSize": "0.85rem"})
+                                            ])
+                                        ], md=6),
+                                        dbc.Col([
+                                            html.Div([
+                                                html.H6("💧 Factor 2: Disponibilidad Hídrica", className="text-info mb-2"),
+                                                html.P("Porcentaje de volumen útil disponible. Indica cuánta agua tiene el embalse por encima de su nivel mínimo técnico para generar energía.", 
+                                                      className="mb-2", style={"fontSize": "0.85rem"})
+                                            ])
+                                        ], md=6)
+                                    ], className="mb-3"),
+                                    
+                                    html.Hr(),
+                                    html.H6("🎯 Lógica de Clasificación de Riesgo:", className="mb-2"),
+                                    dbc.Row([
+                                        dbc.Col([
+                                            html.Div([
+                                                html.Span("🔴 RIESGO ALTO", className="fw-bold", style={"color": "#dc3545", "fontSize": "1rem"}),
+                                                html.Br(),
+                                                html.Small("Embalses estratégicos (participación ≥10%) con volumen crítico (<30%)", 
+                                                         className="text-muted", style={"fontSize": "0.8rem"}),
+                                                html.Br(),
+                                                html.Small("⚠️ Requiere atención inmediata - Riesgo de desabastecimiento", 
+                                                         className="text-danger", style={"fontSize": "0.75rem", "fontWeight": "bold"})
+                                            ], className="p-2 border-start border-danger border-3")
+                                        ], md=4),
+                                        dbc.Col([
+                                            html.Div([
+                                                html.Span("🟡 RIESGO MEDIO", className="fw-bold", style={"color": "#ffc107", "fontSize": "1rem"}),
+                                                html.Br(),
+                                                html.Small("Embalses estratégicos con volumen bajo (30-70%) o embalses pequeños con volumen crítico", 
+                                                         className="text-muted", style={"fontSize": "0.8rem"}),
+                                                html.Br(),
+                                                html.Small("⚡ Monitoreo continuo - Situación de precaución", 
+                                                         className="text-warning", style={"fontSize": "0.75rem", "fontWeight": "bold"})
+                                            ], className="p-2 border-start border-warning border-3")
+                                        ], md=4),
+                                        dbc.Col([
+                                            html.Div([
+                                                html.Span("🟢 RIESGO BAJO", className="fw-bold", style={"color": "#198754", "fontSize": "1rem"}),
+                                                html.Br(),
+                                                html.Small("Embalses con volumen adecuado (≥70%) independientemente de su tamaño", 
+                                                         className="text-muted", style={"fontSize": "0.8rem"}),
+                                                html.Br(),
+                                                html.Small("✅ Situación estable - Operación normal", 
+                                                         className="text-success", style={"fontSize": "0.75rem", "fontWeight": "bold"})
+                                            ], className="p-2 border-start border-success border-3")
+                                        ], md=4)
+                                    ], className="mb-3"),
+                                    
+                                    html.Hr(),
+                                    html.Div([
+                                        html.Strong("💡 Nota Técnica: ", className="text-primary"),
+                                        html.Span("El sistema prioriza la seguridad energética nacional. Un embalse pequeño con bajo volumen puede ser menos crítico que un embalse estratégico en la misma condición.", 
+                                                 style={"fontSize": "0.85rem"})
+                                    ], className="bg-light p-2 rounded")
+                                ], color="info", className="mb-3")
+                            ], md=12)
+                        ]),
+                        id="collapse-semaforo-info",
+                        is_open=False
+                    ),
                     
                     # ========== MAPA DE EMBALSES POR REGIÓN ==========
                     dbc.Row([
@@ -2112,12 +2154,15 @@ def update_content(n_clicks, rio, start_date, end_date, region):
         ], color="warning", className="text-start")
 
     try:
-        # OPTIMIZADO: Usar fetch_metric_data con cache + batching
-        data = fetch_metric_data('AporEner', 'Rio', start_date, end_date)
+        # ✅ OPTIMIZADO: Consulta inteligente SQLite (>=2020) vs API (<2020)
+        # La conversión a GWh se hace automáticamente
+        data, warning_msg = obtener_datos_inteligente('AporEner', 'Rio', start_date, end_date)
+        if warning_msg:
+            logger.info(f"⚠️ {warning_msg}")
         
-        # Convertir de kWh a GWh
-        if data is not None and not data.empty and 'Value' in data.columns:
-            data['Value'] = data['Value'] / 1_000_000  # kWh a GWh
+        # LOGGING: Verificar que datos ya vienen en GWh
+        if data is not None and not data.empty:
+            logger.info(f"🔍 AporEner recibido: {len(data)} registros, Total: {data['Value'].sum():.2f} GWh")
         
         if data is None or data.empty:
             return dbc.Alert([
@@ -2161,11 +2206,14 @@ def update_content(n_clicks, rio, start_date, end_date, region):
         rio_region = ensure_rio_region_loaded()
         data['Region'] = data['Name'].map(rio_region)
         
+        # LOGGING: Ver datos ANTES de filtrar por región
+        logger.info(f"🔍 ANTES filtro - Total data: {len(data)} registros, Suma: {data['Value'].sum():.2f} GWh")
+        
         if region and region != "__ALL_REGIONS__":
-            logger.debug(f"[DEBUG FILTRO] Región original: '{region}', normalizada: '{region_normalized}'")
-            logger.debug(f"[DEBUG FILTRO] Regiones únicas en data: {sorted(data['Region'].dropna().unique().tolist())}")
+            logger.info(f"🔍 [FILTRO REGIÓN] Filtrando región '{region_normalized}'")
+            logger.info(f"🔍 Regiones únicas en data: {sorted(data['Region'].dropna().unique().tolist())}")
             data_filtered = data[data['Region'] == region_normalized]
-            logger.debug(f"[DEBUG FILTRO] Filas después del filtro: {len(data_filtered)}")
+            logger.info(f"🔍 DESPUÉS filtro - data_filtered: {len(data_filtered)} registros, Suma: {data_filtered['Value'].sum():.2f} GWh")
             title_suffix = f"en la región {region_normalized}"
             # Obtener datos frescos de embalses con la nueva columna
             embalses_df_fresh = get_embalses_capacidad(region_normalized, start_date, end_date)
@@ -2365,77 +2413,99 @@ def update_content(n_clicks, rio, start_date, end_date, region):
                     html.H5(f"⚡ Sistema de Análisis Hidrológico por Embalse {title_suffix}", className="text-center mt-4 mb-2"),
                     html.P(f"Análisis detallado con sistema de semáforo de riesgo para monitoreo energético. Los indicadores combinan participación porcentual y volumen útil disponible para identificar situaciones críticas.", className="text-center text-muted mb-3", style={"fontSize": "0.9rem"}),
                     
-                    # Tarjeta explicativa del semáforo
+                    # Botón para expandir/colapsar Sistema de Semáforo (región específica)
                     dbc.Row([
                         dbc.Col([
-                            dbc.Card([
-                                dbc.CardHeader([
-                                    html.I(className="fas fa-traffic-light me-2", style={"color": "#28a745"}),
-                                    html.Strong("🚦 Sistema Inteligente de Semáforo de Riesgo Hidrológico")
-                                ], style={"background": "linear-gradient(135deg, #e8f5e8 0%, #f3f4f6 100%)",
-                                         "border": "none", "borderRadius": "8px 8px 0 0"}),
-                                dbc.CardBody([
-                                    html.P("Este sistema evalúa automáticamente el riesgo operativo de cada embalse mediante un análisis inteligente que combina:", 
-                                          className="mb-3", style={"fontSize": "0.9rem"}),
-                                    
-                                    dbc.Row([
-                                        dbc.Col([
-                                            html.Div([
-                                                html.H6("� Importancia Estratégica", className="text-primary mb-2"),
-                                                html.P("¿Qué tan crítico es este embalse para el sistema energético nacional?", 
-                                                      className="text-muted", style={"fontSize": "0.85rem"}),
-                                                html.Ul([
-                                                    html.Li("Embalses grandes (≥10% participación): Estratégicos", style={"fontSize": "0.8rem"}),
-                                                    html.Li("Embalses pequeños (<10% participación): Locales", style={"fontSize": "0.8rem"})
-                                                ])
-                                            ])
-                                        ], md=6),
-                                        dbc.Col([
-                                            html.Div([
-                                                html.H6("� Estado del Recurso Hídrico", className="text-info mb-2"),
-                                                html.P("¿Cuánta agua útil tiene disponible para generar energía?", 
-                                                      className="text-muted", style={"fontSize": "0.85rem"}),
-                                                html.Ul([
-                                                    html.Li("Crítico: <30% del volumen útil", style={"fontSize": "0.8rem"}),
-                                                    html.Li("Precaución: 30-70% del volumen útil", style={"fontSize": "0.8rem"}),
-                                                    html.Li("Óptimo: ≥70% del volumen útil", style={"fontSize": "0.8rem"})
-                                                ])
-                                            ])
-                                        ], md=6)
-                                    ], className="mb-3"),
-                                    
-                                    html.Hr(),
-                                    html.H6("🎯 Resultados del Análisis:", className="mb-2"),
-                                    dbc.Row([
-                                        dbc.Col([
-                                            html.Div([
-                                                html.Span("�", style={"fontSize": "1.5rem"}),
-                                                html.Strong(" ALTO RIESGO", className="ms-2", style={"color": "#dc3545"}),
-                                                html.Br(),
-                                                html.Small("Embalse estratégico + Agua crítica", className="text-danger fw-bold")
-                                            ], className="text-center p-2 border border-danger rounded")
-                                        ], md=4),
-                                        dbc.Col([
-                                            html.Div([
-                                                html.Span("🟡", style={"fontSize": "1.5rem"}),
-                                                html.Strong(" RIESGO MEDIO", className="ms-2", style={"color": "#ffc107"}),
-                                                html.Br(),
-                                                html.Small("Situaciones intermedias", className="text-warning fw-bold")
-                                            ], className="text-center p-2 border border-warning rounded")
-                                        ], md=4),
-                                        dbc.Col([
-                                            html.Div([
-                                                html.Span("🟢", style={"fontSize": "1.5rem"}),
-                                                html.Strong(" BAJO RIESGO", className="ms-2", style={"color": "#198754"}),
-                                                html.Br(),
-                                                html.Small("Agua suficiente disponible", className="text-success fw-bold")
-                                            ], className="text-center p-2 border border-success rounded")
-                                        ], md=4)
-                                    ])
-                                ], className="p-3")
-                            ], className="card-modern mb-4")
+                            dbc.Button(
+                                [
+                                    html.I(className="fas fa-traffic-light me-2"),
+                                    html.Span("Ver información detallada del Sistema Semáforo de Riesgo Hidrológico", id="semaforo-region-button-text"),
+                                    html.I(className="fas fa-chevron-down ms-2", id="semaforo-region-chevron")
+                                ],
+                                id="toggle-semaforo-region-info",
+                                color="info",
+                                outline=True,
+                                className="mb-3 w-100",
+                                style={"fontSize": "0.95rem", "fontWeight": "500"}
+                            )
                         ], md=12)
                     ]),
+                    
+                    # Contenido colapsable del Sistema de Semáforo (región específica)
+                    dbc.Collapse(
+                        dbc.Row([
+                            dbc.Col([
+                                dbc.Card([
+                                    dbc.CardHeader([
+                                        html.I(className="fas fa-traffic-light me-2", style={"color": "#28a745"}),
+                                        html.Strong("🚦 Sistema Inteligente de Semáforo de Riesgo Hidrológico")
+                                    ], style={"background": "linear-gradient(135deg, #e8f5e8 0%, #f3f4f6 100%)",
+                                             "border": "none", "borderRadius": "8px 8px 0 0"}),
+                                    dbc.CardBody([
+                                        html.P("Este sistema evalúa automáticamente el riesgo operativo de cada embalse mediante un análisis inteligente que combina:", 
+                                              className="mb-3", style={"fontSize": "0.9rem"}),
+                                        
+                                        dbc.Row([
+                                            dbc.Col([
+                                                html.Div([
+                                                    html.H6("� Importancia Estratégica", className="text-primary mb-2"),
+                                                    html.P("¿Qué tan crítico es este embalse para el sistema energético nacional?", 
+                                                          className="text-muted", style={"fontSize": "0.85rem"}),
+                                                    html.Ul([
+                                                        html.Li("Embalses grandes (≥10% participación): Estratégicos", style={"fontSize": "0.8rem"}),
+                                                        html.Li("Embalses pequeños (<10% participación): Locales", style={"fontSize": "0.8rem"})
+                                                    ])
+                                                ])
+                                            ], md=6),
+                                            dbc.Col([
+                                                html.Div([
+                                                    html.H6("� Estado del Recurso Hídrico", className="text-info mb-2"),
+                                                    html.P("¿Cuánta agua útil tiene disponible para generar energía?", 
+                                                          className="text-muted", style={"fontSize": "0.85rem"}),
+                                                    html.Ul([
+                                                        html.Li("Crítico: <30% del volumen útil", style={"fontSize": "0.8rem"}),
+                                                        html.Li("Precaución: 30-70% del volumen útil", style={"fontSize": "0.8rem"}),
+                                                        html.Li("Óptimo: ≥70% del volumen útil", style={"fontSize": "0.8rem"})
+                                                    ])
+                                                ])
+                                            ], md=6)
+                                        ], className="mb-3"),
+                                        
+                                        html.Hr(),
+                                        html.H6("🎯 Resultados del Análisis:", className="mb-2"),
+                                        dbc.Row([
+                                            dbc.Col([
+                                                html.Div([
+                                                    html.Span("�", style={"fontSize": "1.5rem"}),
+                                                    html.Strong(" ALTO RIESGO", className="ms-2", style={"color": "#dc3545"}),
+                                                    html.Br(),
+                                                    html.Small("Embalse estratégico + Agua crítica", className="text-danger fw-bold")
+                                                ], className="text-center p-2 border border-danger rounded")
+                                            ], md=4),
+                                            dbc.Col([
+                                                html.Div([
+                                                    html.Span("🟡", style={"fontSize": "1.5rem"}),
+                                                    html.Strong(" RIESGO MEDIO", className="ms-2", style={"color": "#ffc107"}),
+                                                    html.Br(),
+                                                    html.Small("Situaciones intermedias", className="text-warning fw-bold")
+                                                ], className="text-center p-2 border border-warning rounded")
+                                            ], md=4),
+                                            dbc.Col([
+                                                html.Div([
+                                                    html.Span("🟢", style={"fontSize": "1.5rem"}),
+                                                    html.Strong(" BAJO RIESGO", className="ms-2", style={"color": "#198754"}),
+                                                    html.Br(),
+                                                    html.Small("Agua suficiente disponible", className="text-success fw-bold")
+                                                ], className="text-center p-2 border border-success rounded")
+                                            ], md=4)
+                                        ])
+                                    ], className="p-3")
+                                ], className="card-modern mb-4")
+                            ], md=12)
+                        ]),
+                        id="collapse-semaforo-region-info",
+                        is_open=False
+                    ),
                     
                     # Tablas jerárquicas con semáforo - filtradas por región
                     dbc.Row([
@@ -2571,20 +2641,16 @@ def initialize_hierarchical_tables(start_date, end_date):
         objetoAPI = get_objetoAPI()
         logger.debug(f"DEBUG INIT: Inicializando tablas jerárquicas con fechas {start_date} - {end_date}")
         
-        # Usar fecha con datos disponibles, no las fechas de los controles
-        fecha_con_datos = None
+        # Usar helper para buscar fecha con datos disponibles
         from datetime import date, timedelta
-        for dias_atras in range(7):  # Buscar hasta 7 días atrás desde hoy
-            fecha_prueba = (date.today() - timedelta(days=dias_atras)).strftime('%Y-%m-%d')
-            df_vol_test = fetch_metric_data('VoluUtilDiarEner', 'Embalse', fecha_prueba, fecha_prueba)
-            if df_vol_test is not None and not df_vol_test.empty:
-                fecha_con_datos = fecha_prueba
-                logger.debug(f"DEBUG INIT: Usando fecha con datos: {fecha_con_datos}")
-                break
+        df_vol_test, fecha_obj = obtener_datos_desde_sqlite('VoluUtilDiarEner', 'Embalse', date.today())
         
-        if not fecha_con_datos:
+        if fecha_obj is None:
             logger.error("DEBUG INIT: No se encontraron fechas con datos")
             return [], []
+        
+        fecha_con_datos = fecha_obj.strftime('%Y-%m-%d')
+        logger.debug(f"DEBUG INIT: Usando fecha con datos: {fecha_con_datos}")
         
         regiones_totales, df_completo_embalses = get_tabla_regiones_embalses(None, fecha_con_datos)
         logger.debug(f"DEBUG INIT: Regiones obtenidas: {len(regiones_totales) if not regiones_totales.empty else 0}")
@@ -2598,12 +2664,10 @@ def initialize_hierarchical_tables(start_date, end_date):
         capacidad_data = []
         
         logger.debug(f"DEBUG INIT: Procesando {len(regiones_totales)} regiones")
-        # Calcular suma total nacional de capacidad útil para la participación
-        total_capacidad_nacional = regiones_totales['Total (GWh)'].sum()
+        
         for _, row in regiones_totales.iterrows():
-            logger.debug(f"DEBUG INIT: Procesando región: {row['Región']}")
-            # Participación = capacidad útil de la región / capacidad útil total nacional * 100
-            participacion_pct = (row['Total (GWh)'] / total_capacidad_nacional * 100) if total_capacidad_nacional > 0 else 0
+            # ✅ CORREGIDO: Usar directamente la columna 'Participación (%)' calculada en get_tabla_regiones_embalses
+            participacion_pct = row.get('Participación (%)', 0)
             participacion_data.append({
                 'nombre': f"▶️ {row['Región']}",
                 'participacion': f"{participacion_pct:.2f}%",
@@ -3005,6 +3069,70 @@ def update_html_tables_from_stores(participacion_complete, capacidad_complete, r
         traceback.print_exc()
         return [], []
 
+# Clientside callback para toggle del Sistema Semáforo (más confiable para contenido dinámico)
+import dash
+from dash import clientside_callback, ClientsideFunction
+
+# JavaScript para manejar el toggle
+dash.clientside_callback(
+    """
+    function(n_clicks, is_open) {
+        if (!n_clicks) {
+            return window.dash_clientside.no_update;
+        }
+        const new_state = !is_open;
+        const button_text = new_state ? "Ocultar información del Sistema Semáforo" : "Ver información detallada del Sistema Semáforo de Riesgo Hidrológico";
+        const chevron_class = new_state ? "fas fa-chevron-up ms-2" : "fas fa-chevron-down ms-2";
+        return [new_state, button_text, chevron_class];
+    }
+    """,
+    [Output("collapse-semaforo-info", "is_open"),
+     Output("semaforo-button-text", "children"),
+     Output("semaforo-chevron", "className")],
+    [Input("toggle-semaforo-info", "n_clicks")],
+    [State("collapse-semaforo-info", "is_open")]
+)
+
+# Clientside callback para la vista de región
+dash.clientside_callback(
+    """
+    function(n_clicks, is_open) {
+        if (!n_clicks) {
+            return window.dash_clientside.no_update;
+        }
+        const new_state = !is_open;
+        const button_text = new_state ? "Ocultar información del Sistema Semáforo" : "Ver información detallada del Sistema Semáforo de Riesgo Hidrológico";
+        const chevron_class = new_state ? "fas fa-chevron-up ms-2" : "fas fa-chevron-down ms-2";
+        return [new_state, button_text, chevron_class];
+    }
+    """,
+    [Output("collapse-semaforo-region-info", "is_open"),
+     Output("semaforo-region-button-text", "children"),
+     Output("semaforo-region-chevron", "className")],
+    [Input("toggle-semaforo-region-info", "n_clicks")],
+    [State("collapse-semaforo-region-info", "is_open")]
+)
+
+# Clientside callback para la guía de lectura de la gráfica
+dash.clientside_callback(
+    """
+    function(n_clicks, is_open) {
+        if (!n_clicks) {
+            return window.dash_clientside.no_update;
+        }
+        const new_state = !is_open;
+        const button_text = new_state ? "Ocultar guía de lectura" : "Ver guía de lectura de la gráfica";
+        const chevron_class = new_state ? "fas fa-chevron-up ms-2" : "fas fa-chevron-down ms-2";
+        return [new_state, button_text, chevron_class];
+    }
+    """,
+    [Output("collapse-guia-grafica", "is_open"),
+     Output("guia-grafica-button-text", "children"),
+     Output("guia-grafica-chevron", "className")],
+    [Input("toggle-guia-grafica", "n_clicks")],
+    [State("collapse-guia-grafica", "is_open")]
+)
+
 # Callback adicional para cargar datos por defecto al iniciar la página
 # TEMPORALMENTE DESHABILITADO PARA EVITAR CONFLICTOS
 # @callback(
@@ -3313,34 +3441,18 @@ def get_tabla_regiones_embalses(start_date=None, end_date=None):
 
         # Usar solo la fecha final para todos los cálculos (como en las fichas)
         fecha_solicitada = end_date if end_date else start_date
+        fecha_obj = datetime.strptime(fecha_solicitada if fecha_solicitada else today, '%Y-%m-%d').date()
 
-        # Función para encontrar la fecha más reciente con datos completos (al menos 20 embalses)
-        def encontrar_fecha_con_datos(fecha_inicial):
-            for dias_atras in range(7):  # Buscar hasta 7 días atrás
-                fecha_prueba = (datetime.strptime(fecha_inicial, '%Y-%m-%d') - timedelta(days=dias_atras)).strftime('%Y-%m-%d')
-                df_vol_test = fetch_metric_data('VoluUtilDiarEner', 'Embalse', fecha_prueba, fecha_prueba)
-                df_cap_test = fetch_metric_data('CapaUtilDiarEner', 'Embalse', fecha_prueba, fecha_prueba)
-                
-                # Buscar fecha con datos más completos (al menos 20 embalses con volumen)
-                if (df_vol_test is not None and not df_vol_test.empty and 
-                    df_cap_test is not None and not df_cap_test.empty and
-                    len(df_vol_test) >= 20):
-                    logger.debug(f"[DEBUG] Usando fecha con datos disponibles para cálculo de embalses: {fecha_prueba} ({len(df_vol_test)} embalses con volumen)")
-                    return fecha_prueba
-            
-            # Si no encontramos fecha con datos completos, usar cualquier fecha con datos
-            for dias_atras in range(7):
-                fecha_prueba = (datetime.strptime(fecha_inicial, '%Y-%m-%d') - timedelta(days=dias_atras)).strftime('%Y-%m-%d')
-                df_vol_test = fetch_metric_data('VoluUtilDiarEner', 'Embalse', fecha_prueba, fecha_prueba)
-                df_cap_test = fetch_metric_data('CapaUtilDiarEner', 'Embalse', fecha_prueba, fecha_prueba)
-                if (df_vol_test is not None and not df_vol_test.empty and 
-                    df_cap_test is not None and not df_cap_test.empty):
-                    logger.debug(f"[DEBUG] Usando fecha con datos parciales para cálculo de embalses: {fecha_prueba} ({len(df_vol_test)} embalses con volumen)")
-                    return fecha_prueba
-            return None
-
-        # Encontrar fecha con datos disponibles
-        fecha = encontrar_fecha_con_datos(fecha_solicitada if fecha_solicitada else today)
+        # Usar helper para buscar fecha con datos disponibles
+        df_vol_test, fecha_encontrada = obtener_datos_desde_sqlite('VoluUtilDiarEner', 'Embalse', fecha_obj)
+        df_cap_test, _ = obtener_datos_desde_sqlite('CapaUtilDiarEner', 'Embalse', fecha_obj)
+        
+        if fecha_encontrada is None or df_vol_test is None or df_cap_test is None:
+            logger.warning("No se encontraron datos en ninguna fecha reciente")
+            return pd.DataFrame(), pd.DataFrame()
+        
+        fecha = fecha_encontrada.strftime('%Y-%m-%d')
+        logger.debug(f"[DEBUG] Usando fecha con datos disponibles para cálculo de embalses: {fecha} ({len(df_vol_test)} embalses con volumen)")
 
         if not fecha:
             logger.warning("No se encontraron datos en ninguna fecha reciente")
@@ -3423,10 +3535,22 @@ def get_tabla_regiones_embalses(start_date=None, end_date=None):
                         'Volumen Útil (%)': 0.00
                     })
             regiones_totales = pd.DataFrame(regiones_resumen)
-# REMOVED DEBUG:             logger.info(f"Tabla de regiones creada con {len(regiones_totales)} regiones (usando función unificada)")
+            
+            # 🆕 Calcular participación porcentual de cada región respecto al total nacional
+            # La participación se basa en la capacidad útil total de cada región
+            total_capacidad_nacional = regiones_totales['Total (GWh)'].sum()
+            if total_capacidad_nacional > 0:
+                regiones_totales['Participación (%)'] = (
+                    regiones_totales['Total (GWh)'] / total_capacidad_nacional * 100
+                ).round(2)
+            else:
+                regiones_totales['Participación (%)'] = 0.0
+            
+            logger.debug(f"Tabla de regiones creada con {len(regiones_totales)} regiones")
+            logger.debug(f"Participación por región: {regiones_totales[['Región', 'Participación (%)']].to_dict('records')}")
         else:
             # Si no hay datos, crear DataFrame vacío con estructura correcta
-            regiones_totales = pd.DataFrame(columns=['Región', 'Total (GWh)', 'Volumen Util (GWh)', 'Volumen Útil (%)'])
+            regiones_totales = pd.DataFrame(columns=['Región', 'Total (GWh)', 'Volumen Util (GWh)', 'Volumen Útil (%)', 'Participación (%)'])
             logger.warning("No se pudieron obtener datos de embalses para las fechas disponibles")
 
         # (No agregar fila TOTAL SISTEMA aquí, se agregará manualmente en la tabla de participación)
@@ -3831,16 +3955,16 @@ def get_embalses_capacidad(region=None, start_date=None, end_date=None):
         # Si no hay datos para la fecha exacta, buscar fecha anterior con datos (igual que la función unificada)
         if df_capacidad is None or df_capacidad.empty:
             logger.debug("DEBUG CAPACIDAD: Buscando fecha anterior con datos...")
-            for dias_atras in range(1, 8):  # Buscar hasta 7 días atrás
-                fecha_prueba = (datetime.strptime(fecha_para_calculo, '%Y-%m-%d') - timedelta(days=dias_atras)).strftime('%Y-%m-%d')
-                df_capacidad = fetch_metric_data('CapaUtilDiarEner','Embalse', fecha_prueba, fecha_prueba)
-                if df_capacidad is not None and not df_capacidad.empty:
-                    logger.debug(f"DEBUG CAPACIDAD: Usando fecha con datos: {fecha_prueba}")
-                    fecha_para_calculo = fecha_prueba
-                    break
-            else:
+            # Usar helper para buscar fecha con datos disponibles
+            fecha_obj = datetime.strptime(fecha_para_calculo, '%Y-%m-%d').date()
+            df_capacidad, fecha_encontrada = obtener_datos_desde_sqlite('CapaUtilDiarEner', 'Embalse', fecha_obj)
+            
+            if fecha_encontrada is None or df_capacidad is None:
                 print("❌ DEBUG CAPACIDAD: No se encontraron datos en los últimos 7 días")
                 return pd.DataFrame()
+            
+            fecha_para_calculo = fecha_encontrada.strftime('%Y-%m-%d')
+            logger.debug(f"DEBUG CAPACIDAD: Usando fecha con datos: {fecha_para_calculo}")
         
         logger.debug(f"DEBUG CAPACIDAD: Datos finales obtenidos: {len(df_capacidad)} registros")
         
@@ -4234,15 +4358,14 @@ def create_line_chart(data, rio_name=None, start_date=None, end_date=None):
                     fecha_fin_str = str(end_date)
                 
                 # Obtener media histórica
-                media_hist_data = fetch_metric_data('AporEnerMediHist', 'Rio', fecha_inicio_str, fecha_fin_str)
+                media_hist_data, _ = obtener_datos_inteligente('AporEnerMediHist', 'Rio', fecha_inicio_str, fecha_fin_str)
                 
                 if media_hist_data is not None and not media_hist_data.empty:
                     # Filtrar por el río específico
                     media_hist_rio = media_hist_data[media_hist_data['Name'] == rio_name]
                     
                     if not media_hist_rio.empty and 'Value' in media_hist_rio.columns:
-                        # Convertir de kWh a GWh
-                        media_hist_rio['Value'] = media_hist_rio['Value'] / 1_000_000
+                        # ⚠️ NO convertir - fetch_metric_data YA convierte a GWh automáticamente
                         
                         # Combinar datos reales e históricos para colorear según estado
                         # Necesitamos preparar los datos reales en formato adecuado
@@ -4848,9 +4971,20 @@ def create_total_timeline_chart(data, metric_name, region_filter=None, rio_filte
         return dbc.Alert("No se encuentran las columnas necesarias (Date, Value).", 
                         color="warning", className="alert-modern")
     
+    # LOGGING: Ver qué datos recibimos ANTES de agrupar
+    try:
+        logger.info(f"🔍 create_total_timeline_chart recibió {len(data)} registros")
+        logger.info(f"🔍 Columnas: {list(data.columns)}")
+        logger.info(f"🔍 Fechas únicas: {data['Date'].nunique()}")
+        logger.info(f"🔍 Suma total de Value ANTES de agrupar: {data['Value'].sum():.2f} GWh")
+    except Exception as log_error:
+        logger.warning(f"⚠️ Error en logging: {log_error}")
+    
     # Agrupar por fecha y sumar todos los valores
     daily_totals = data.groupby('Date')['Value'].sum().reset_index()
     daily_totals = daily_totals.sort_values('Date')
+    
+    logger.info(f"🔍 DESPUÉS de agrupar: {len(daily_totals)} fechas, Total: {daily_totals['Value'].sum():.2f} GWh")
     
     # Obtener media histórica y calcular indicador
     porcentaje_vs_historico = None
@@ -4864,7 +4998,9 @@ def create_total_timeline_chart(data, metric_name, region_filter=None, rio_filte
         logger.debug(f"Consultando AporEnerMediHist desde {fecha_inicio} hasta {fecha_fin}")
         
         # Obtener datos de media histórica de energía por río
-        media_hist_data = fetch_metric_data('AporEnerMediHist', 'Rio', fecha_inicio, fecha_fin)
+        media_hist_data, warning_msg = obtener_datos_inteligente('AporEnerMediHist', 'Rio', fecha_inicio, fecha_fin)
+        if warning_msg:
+            logger.info(f"⚠️ {warning_msg}")
         
         logger.debug(f"Datos recibidos de AporEnerMediHist: {len(media_hist_data) if media_hist_data is not None else 0} registros")
         if media_hist_data is not None and not media_hist_data.empty:
@@ -4886,11 +5022,17 @@ def create_total_timeline_chart(data, metric_name, region_filter=None, rio_filte
             if region_filter:
                 # Agregar mapeo de región
                 rio_region = ensure_rio_region_loaded()
-                media_hist_data['Region'] = media_hist_data['Name'].map(rio_region)
+                # CORRECCIÓN: Normalizar nombres ANTES de mapear
+                media_hist_data['Name_Upper'] = media_hist_data['Name'].str.strip().str.upper()
+                media_hist_data['Region'] = media_hist_data['Name_Upper'].map(rio_region)
                 # Filtrar por región
                 antes_filtro = len(media_hist_data)
+                logger.info(f"🔍 ANTES filtro región '{region_filter}': {antes_filtro} registros")
+                logger.info(f"🔍 Regiones disponibles: {sorted(media_hist_data['Region'].dropna().unique())}")
                 media_hist_data = media_hist_data[media_hist_data['Region'] == region_filter]
-                logger.debug(f"Media histórica filtrada por región '{region_filter}': {antes_filtro} → {len(media_hist_data)} registros")
+                logger.info(f"🔍 DESPUÉS filtro región '{region_filter}': {len(media_hist_data)} registros")
+                if media_hist_data.empty:
+                    logger.error(f"❌ ERROR: No hay datos históricos después del filtro para región '{region_filter}'")
             elif rio_filter:
                 # Filtrar por río específico
                 antes_filtro = len(media_hist_data)
@@ -4911,9 +5053,14 @@ def create_total_timeline_chart(data, metric_name, region_filter=None, rio_filte
                 total_real = daily_totals['Value'].sum()  # SUMA TOTAL
                 total_historico = media_hist_totals['Value'].sum()  # SUMA TOTAL
                 
+                logger.info(f"📊 CÁLCULO PORCENTAJE: Real={total_real:.2f} GWh, Histórico={total_historico:.2f} GWh")
+                
                 if total_historico > 0:
                     porcentaje_vs_historico = (total_real / total_historico) * 100
-                    logger.debug(f"Comparación: Real total={total_real:.2f} GWh vs Histórico={total_historico:.2f} GWh ({porcentaje_vs_historico:.1f}%)")
+                    logger.info(f"✅ Porcentaje calculado: {porcentaje_vs_historico:.1f}%")
+                else:
+                    logger.error(f"❌ ERROR: total_historico = 0, no se puede calcular porcentaje")
+                    porcentaje_vs_historico = None
             else:
                 tiene_media = False
                 logger.warning(f"No hay datos después del filtrado")
@@ -5209,11 +5356,10 @@ def show_modal_table(timeline_clickData, is_open, region_data):
                         fecha_fin_str = fecha_fin.strftime('%Y-%m-%d')
                     
                     # Obtener media histórica
-                    media_hist_data = fetch_metric_data('AporEnerMediHist', 'Rio', fecha_inicio_str, fecha_fin_str)
+                    media_hist_data, _ = obtener_datos_inteligente('AporEnerMediHist', 'Rio', fecha_inicio_str, fecha_fin_str)
                     
                     if media_hist_data is not None and not media_hist_data.empty:
-                        # Convertir de kWh a GWh (según documentación de XM, AporEnerMediHist viene en kWh)
-                        media_hist_data['Value'] = media_hist_data['Value'] / 1_000_000
+                        # ⚠️ NO convertir - fetch_metric_data YA convierte a GWh automáticamente en _xm.py
                         
                         # Agregar información de región
                         rio_region = ensure_rio_region_loaded()
