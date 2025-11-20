@@ -96,20 +96,62 @@ TIPOS_FUENTE = {
 def obtener_listado_recursos(tipo_fuente='EOLICA'):
     """Obtener el listado de recursos para un tipo de fuente específico
     
-    OPTIMIZADO v2: Usa cache_manager (persistente en disco, 7 días)
-    Evita consultas API que tardan 5-10 segundos en CADA carga de página
+    ARQUITECTURA v3.0 (2025-11-20): USA SQLITE PRIMERO
+    - ✅ SQLite tiene catálogos completos (ListadoRecursos: 1,331 recursos)
+    - ✅ Instantáneo (0.003s vs 5-10s API)
+    - ✅ No depende de API XM (más confiable)
     """
-    # CACHE PERSISTENTE: ListadoRecursos cambia poco, cachear por 7 días
+    from utils.db_manager import get_catalogo
+    
+    logger.info(f"🔍 Obteniendo ListadoRecursos desde SQLite ({tipo_fuente})...")
+    
+    try:
+        # PASO 1: Obtener catálogo completo desde SQLite
+        catalogos = get_catalogo('ListadoRecursos')
+        
+        if not catalogos:
+            logger.warning("⚠️ Catálogo ListadoRecursos vacío en SQLite, intentando API...")
+            # Fallback a API solo si SQLite falla
+            return obtener_listado_recursos_desde_api(tipo_fuente)
+        
+        # Convertir lista de dicts a DataFrame
+        df_recursos = pd.DataFrame(catalogos)
+        
+        logger.info(f"✅ SQLite: {len(df_recursos)} recursos obtenidos")
+        
+        # Renombrar columnas para compatibilidad con código existente
+        # SQLite: codigo, nombre, tipo, region, capacidad
+        # API: Values_Code, Values_Name, Values_Type, Values_Region
+        df_recursos = df_recursos.rename(columns={
+            'codigo': 'Values_Code',
+            'nombre': 'Values_Name',
+            'tipo': 'Values_Type',
+            'region': 'Values_Region',
+            'capacidad': 'Values_Capacity'
+        })
+        
+        # Filtrar por tipo de fuente
+        if tipo_fuente.upper() != 'TODAS':
+            df_filtrado = filtrar_por_tipo_fuente(df_recursos, tipo_fuente)
+            logger.info(f"✅ Filtrado {tipo_fuente}: {len(df_filtrado)} recursos")
+            return df_filtrado
+        
+        return df_recursos
+        
+    except Exception as e:
+        logger.error(f"❌ Error obteniendo catálogo desde SQLite: {e}")
+        # Fallback a API en caso de error
+        return obtener_listado_recursos_desde_api(tipo_fuente)
+
+
+def obtener_listado_recursos_desde_api(tipo_fuente='EOLICA'):
+    """Fallback: obtener listado desde API XM (LENTO - solo si SQLite falla)"""
     cache_key = get_cache_key('listado_recursos', tipo_fuente)
     cached_data = get_from_cache(cache_key, allow_expired=False)
     
     if cached_data is not None:
         logger.info(f"✅ Cache HIT: ListadoRecursos ({tipo_fuente}) - {len(cached_data)} plantas")
         return cached_data
-    
-    debug_file = "/home/admonctrlxm/server/logs/debug_callback.log"
-    with open(debug_file, "a") as f:
-        f.write(f"   [obtener_listado_recursos] Cache MISS para {tipo_fuente} - consultando API\n")
     
     try:
         objetoAPI = get_objetoAPI()
@@ -120,75 +162,85 @@ def obtener_listado_recursos(tipo_fuente='EOLICA'):
         fecha_fin = date.today() - timedelta(days=14)
         fecha_inicio = fecha_fin - timedelta(days=7)
         
-        logger.info(f"🔄 Consultando ListadoRecursos API ({tipo_fuente})...")
+        logger.warning(f"⚠️ Consultando ListadoRecursos API ({tipo_fuente}) - LENTO...")
         
-        with open(debug_file, "a") as f:
-            f.write(f"   [obtener_listado_recursos] Llamando ListadoRecursos API...\n")
-        
-        # ✅ OPTIMIZADO: Usar fetch_metric_data con cache
+        # Usar fetch_metric_data con cache
         recursos = fetch_metric_data("ListadoRecursos", "Sistema", 
                                      fecha_inicio.strftime('%Y-%m-%d'), 
                                      fecha_fin.strftime('%Y-%m-%d'))
         
-        with open(debug_file, "a") as f:
-            f.write(f"   [obtener_listado_recursos] API respondió\n")
-        
-        with open(debug_file, "a") as f:
-            if recursos is None:
-                f.write(f"   [obtener_listado_recursos] recursos es None\n")
-            elif recursos.empty:
-                f.write(f"   [obtener_listado_recursos] recursos está vacío\n")
-            else:
-                f.write(f"   [obtener_listado_recursos] recursos tiene {len(recursos)} filas\n")
-        
         if recursos is not None and not recursos.empty:
-            if 'Values_Type' in recursos.columns:
-                # Debug: mostrar tipos únicos disponibles
-                tipos_unicos = recursos['Values_Type'].dropna().unique()
-                print(f"🔍 Tipos de fuente disponibles: {sorted(tipos_unicos)}")
-                with open(debug_file, "a") as f:
-                    f.write(f"   [obtener_listado_recursos] Tipos disponibles: {sorted(tipos_unicos)[:10]}\n")
-                
-                # Si es TODAS, retornar todas las plantas
-                if tipo_fuente.upper() == 'TODAS':
-                    plantas = recursos.copy()
-                    print(f"📊 Total plantas (TODAS): {len(plantas)}")
-                    return plantas
-                
-                # Buscar con términos alternativos para biomasa
-                elif tipo_fuente.upper() == 'BIOMASA':
-                    # Intentar diferentes términos para biomasa
-                    terminos_biomasa = ['BIOMASA', 'BIOMAS', 'COGENER', 'BAGAZO', 'RESIDUO']
-                    plantas = pd.DataFrame()
-                    for termino in terminos_biomasa:
-                        plantas_temp = recursos[
-                            recursos['Values_Type'].str.contains(termino, na=False, case=False)
-                        ].copy()
-                        if not plantas_temp.empty:
-                            plantas = pd.concat([plantas, plantas_temp]).drop_duplicates()
-                            print(f"✅ Encontradas plantas con término '{termino}': {len(plantas_temp)}")
-                else:
-                    plantas = recursos[
-                        recursos['Values_Type'].str.contains(tipo_fuente, na=False, case=False)
-                    ].copy()
-                
-                print(f"📊 Total plantas encontradas para {tipo_fuente}: {len(plantas)}")
-                
-                # GUARDAR EN CACHE PERSISTENTE (7 días)
-                if not plantas.empty:
-                    save_to_cache(cache_key, plantas, cache_type='listado_recursos')
-                    logger.info(f"💾 Cache guardado: ListadoRecursos ({tipo_fuente}) - {len(plantas)} plantas")
-                
-                return plantas
-            else:
-                print("No se encontró la columna 'Values_Type' en recursos")
-        print(f"No se obtuvieron recursos de tipo {tipo_fuente}")
+            logger.info(f"✅ API: {len(recursos)} recursos obtenidos")
+            
+            # Guardar en cache para futuras consultas
+            save_to_cache(cache_key, recursos, cache_type='listado_recursos')
+            
+            # Filtrar por tipo
+            if tipo_fuente.upper() != 'TODAS':
+                return filtrar_por_tipo_fuente(recursos, tipo_fuente)
+            return recursos
+        
+        logger.error("❌ API no devolvió datos")
         return pd.DataFrame()
+        
     except Exception as e:
-        print(f"Error obteniendo listado de recursos {tipo_fuente}: {e}")
-        import traceback
-        traceback.print_exc()
-    return pd.DataFrame()
+        logger.error(f"❌ Error API: {e}")
+        return pd.DataFrame()
+
+
+def filtrar_por_tipo_fuente(df_recursos, tipo_fuente):
+    """Filtrar recursos por tipo de fuente energética
+    
+    Args:
+        df_recursos: DataFrame con columna Values_Type
+        tipo_fuente: 'HIDRAULICA', 'EOLICA', 'SOLAR', 'TERMICA', 'BIOMASA'
+    
+    Returns:
+        DataFrame filtrado
+    """
+    if df_recursos.empty or 'Values_Type' not in df_recursos.columns:
+        return df_recursos
+    
+    # TODAS las fuentes
+    if tipo_fuente.upper() == 'TODAS':
+        return df_recursos
+    
+    # Buscar con términos alternativos para biomasa
+    if tipo_fuente.upper() == 'BIOMASA':
+        terminos_biomasa = ['BIOMASA', 'BIOMAS', 'COGENER', 'BAGAZO', 'RESIDUO']
+        plantas = pd.DataFrame()
+        for termino in terminos_biomasa:
+            plantas_temp = df_recursos[
+                df_recursos['Values_Type'].str.contains(termino, na=False, case=False)
+            ]
+            if not plantas_temp.empty:
+                plantas = pd.concat([plantas, plantas_temp], ignore_index=True)
+        
+        if not plantas.empty:
+            plantas = plantas.drop_duplicates(subset=['Values_Code'])
+            return plantas
+        
+        logger.warning(f"⚠️ No se encontraron plantas de Biomasa")
+        return pd.DataFrame()
+    
+    # Otros tipos: buscar coincidencia exacta o parcial
+    tipo_upper = tipo_fuente.upper()
+    plantas = df_recursos[
+        df_recursos['Values_Type'].str.contains(tipo_upper, na=False, case=False)
+    ]
+    
+    if plantas.empty:
+        logger.warning(f"⚠️ No se encontraron plantas de {tipo_fuente}")
+    
+    return plantas
+
+
+
+# CÓDIGO DEPRECADO - Mantener por compatibilidad pero ya no se usa
+def obtener_listado_recursos_OLD(tipo_fuente='EOLICA'):
+    """DEPRECADO: Usa API directamente - reemplazado por versión SQLite"""
+    logger.warning("⚠️ Usando función DEPRECADA - debería usar SQLite")
+    return obtener_listado_recursos_desde_api(tipo_fuente)
 
 def _detectar_columna_sic(recursos_df: pd.DataFrame, f_ini: date, f_fin: date):
     """Detecta la columna que contiene códigos SIC válidos
