@@ -2323,14 +2323,15 @@ def cargar_tabla_resumen(_):
     """Cargar tabla resumen de todas las plantas - LAZY LOAD"""
     return crear_tabla_resumen_todas_plantas()
 
-# Callback - Carga automática al inicio + al hacer clic
+# Callback UNIFICADO - Carga automática de FICHAS + GRÁFICAS en una sola ejecución
 @callback(
-    Output('contenido-fuentes', 'children'),
+    [Output('contenedor-fichas-generacion', 'children'),
+     Output('contenido-fuentes', 'children')],
     Input('btn-actualizar-fuentes', 'n_clicks'),
     [State('tipo-fuente-dropdown', 'value'),
      State('date-range-fuentes', 'start_date'),
      State('date-range-fuentes', 'end_date')],
-    prevent_initial_call=False  # ✅ Carga automática (preload_app evita múltiples ejecuciones)
+    prevent_initial_call=False  # ✅ Carga automática
 )
 def actualizar_tablero_fuentes(n_clicks, tipos_fuente, fecha_inicio, fecha_fin):
     debug_file = "/home/admonctrlxm/server/logs/debug_callback.log"
@@ -2349,14 +2350,16 @@ def actualizar_tablero_fuentes(n_clicks, tipos_fuente, fecha_inicio, fecha_fin):
     # Validar que tipos_fuente sea una lista
     if not tipos_fuente:
         logger.warning("Sin tipos_fuente")
-        return dbc.Alert("⚠️ Selecciona al menos una fuente de energía", color="warning", className="text-center")
+        alert = dbc.Alert("⚠️ Selecciona al menos una fuente de energía", color="warning", className="text-center")
+        return (dbc.Alert("⏳ Inicializando...", color="info"), alert)
     
     # Si es string, convertir a lista
     if isinstance(tipos_fuente, str):
         tipos_fuente = [tipos_fuente]
     
     if not fecha_inicio or not fecha_fin:
-        return dbc.Alert("Selecciona un rango de fechas válido", color="info")
+        alert = dbc.Alert("Selecciona un rango de fechas válido", color="info")
+        return (dbc.Alert("⏳ Inicializando...", color="info"), alert)
     
     try:
         # Convertir fechas
@@ -2596,11 +2599,15 @@ def actualizar_tablero_fuentes(n_clicks, tipos_fuente, fecha_inicio, fecha_fin):
             ], color="warning", className="mb-3"))
         
         logger.info(f"✅ Datos cargados exitosamente para {', '.join(tipos_fuente)}")
-        return contenido
+        
+        # Generar fichas desde el DataFrame ya cargado (evita consulta duplicada)
+        fichas = crear_fichas_desde_dataframe(df_generacion_completo, fecha_inicio_dt, fecha_fin_dt, 'TODAS')
+        
+        return (fichas, contenido)
         
     except TimeoutException as e:
         logger.error(f"⏱️ TIMEOUT GENERAL: {e}")
-        return dbc.Alert([
+        error_alert = dbc.Alert([
             html.I(className="fas fa-clock me-2"),
             html.Strong("⏱️ La carga de datos excedió el tiempo límite"),
             html.Br(),
@@ -2611,72 +2618,23 @@ def actualizar_tablero_fuentes(n_clicks, tipos_fuente, fecha_inicio, fecha_fin):
                 html.Li("Intentar de nuevo en 5-10 minutos")
             ], className="mb-0 mt-2")
         ], color="danger", className="text-start")
+        return (dbc.Alert("❌ Error", color="danger"), error_alert)
     
     except Exception as e:
         logger.exception(f"❌ Error en callback: {e}")
-        return dbc.Alert([
+        error_alert = dbc.Alert([
             html.I(className="fas fa-exclamation-circle me-2"),
             html.Strong(f"❌ Error al procesar los datos"),
             html.Br(),
             html.Small(f"Detalles técnicos: {str(e)[:200]}")
         ], color="danger")
+        return (dbc.Alert("❌ Error", color="danger"), error_alert)
 
 
-# Callback para cargar fichas - Carga automática al inicio + al hacer clic
-@callback(
-    Output('contenedor-fichas-generacion', 'children'),
-    Input('btn-actualizar-fuentes', 'n_clicks'),
-    [State('date-range-fuentes', 'start_date'),
-     State('date-range-fuentes', 'end_date'),
-     State('tipo-fuente-dropdown', 'value')],
-    prevent_initial_call=False  # ✅ Carga automática (preload_app evita múltiples ejecuciones)
-)
-def actualizar_fichas_generacion(n_clicks, start_date, end_date, tipo_fuente_seleccionado):
-    """Genera las fichas - SIEMPRE muestra TODAS las fuentes (sin filtrar)"""
-    
-    logger.info(f"� CALLBACK FICHAS EJECUTADO")
-    
-    # Si no hay valores, mostrar mensaje de espera
-    if start_date is None or end_date is None:
-        return dbc.Alert("⏳ Inicializando datos...", color="info")
-    
-    # Convertir fechas de string a date
-    fecha_inicio = pd.to_datetime(start_date).date()
-    fecha_fin = pd.to_datetime(end_date).date()
-    
-    try:
-        # ═══════════════════════════════════════════════════════════════
-        # OPTIMIZACIÓN: Usar Gene con entidad Recurso (1 llamada para todas las plantas)
-        # ═══════════════════════════════════════════════════════════════
-        
-        todas_fuentes = ['HIDRAULICA', 'TERMICA', 'EOLICA', 'SOLAR', 'BIOMASA']
-        df_generacion_completo = pd.DataFrame()
-        
-        logger.info(f"🚀 Generando fichas con método optimizado (Gene Recurso)")
-        
-        for fuente in todas_fuentes:
-            df_agregado = obtener_generacion_agregada_por_tipo(
-                fecha_inicio.strftime('%Y-%m-%d'),
-                fecha_fin.strftime('%Y-%m-%d'),
-                fuente
-            )
-            if not df_agregado.empty:
-                df_generacion_completo = pd.concat([df_generacion_completo, df_agregado], ignore_index=True)
-        
-        if not df_generacion_completo.empty:
-            logger.info(f"⚡ Generando fichas con datos optimizados")
-            return crear_fichas_desde_dataframe(df_generacion_completo, fecha_inicio, fecha_fin, 'TODAS')
-        
-        # Fallback: usar función original si no hay datos
-        logger.warning(f"⚠️ Sin datos optimizados, usando método original")
-        return crear_fichas_generacion_xm_con_fechas(fecha_inicio, fecha_fin, 'TODAS')
-        
-    except Exception as e:
-        logger.error(f"Error generando fichas: {e}")
-        import traceback
-        traceback.print_exc()
-        return dbc.Alert(f"Error cargando indicadores: {str(e)}", color="danger")
-
+# ═══════════════════════════════════════════════════════════════
+# NOTA: Callback de fichas ELIMINADO - Ahora el callback principal unificado
+# devuelve tanto fichas como gráficas en una sola ejecución (evita duplicación)
+# ═══════════════════════════════════════════════════════════════
 
 # Caché manual para fichas de generación
 _cache_fichas = {}
