@@ -216,11 +216,11 @@ class ValidadorETL:
         logger.info("="*60)
         logger.info(f"Inicio: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         
-        # Métricas críticas a validar
+        # Métricas críticas a validar (entidad debe coincidir con API XM)
         metricas = [
-            ('Gene', '_SISTEMA_', 'Generación Sistema'),
-            ('DemaCome', '_SISTEMA_', 'Demanda Comercial'),
-            ('AporEner', '_SISTEMA_', 'Aportes Energía'),
+            ('Gene', 'Sistema', 'Generación Sistema'),
+            ('DemaCome', 'Sistema', 'Demanda Comercial'),
+            ('AporEner', 'Sistema', 'Aportes Energía'),
             ('VoluUtilDiarEner', 'Embalse', 'Volumen Útil Diario'),
             ('CapaUtilDiarEner', 'Embalse', 'Capacidad Útil Diario'),
         ]
