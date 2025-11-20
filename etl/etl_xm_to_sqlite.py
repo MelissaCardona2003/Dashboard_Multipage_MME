@@ -295,7 +295,8 @@ def poblar_metrica(obj_api, config, usar_timeout=True, timeout_seconds=60):
             valor_gwh = float(row['Value'])
             
             # VALIDACIÓN: Rechazar DemaCome con valores anormalmente bajos
-            if metric == 'DemaCome' and entity == 'Sistema' and valor_gwh < 100:
+            # Threshold reducido de 100 a 10 GWh para permitir datos parciales válidos
+            if metric == 'DemaCome' and entity == 'Sistema' and valor_gwh < 10:
                 logging.warning(f"⚠️  {metric}/{entity} ({fecha}): Valor {valor_gwh:.2f} GWh muy bajo, RECHAZADO (posible dato incompleto de API XM)")
                 continue  # Saltar este registro
             
@@ -303,12 +304,16 @@ def poblar_metrica(obj_api, config, usar_timeout=True, timeout_seconds=60):
             # Name: AporEner/Rio, DemaCome/Agente
             # Values_code: Gene/Recurso, Gene/Sistema (código del recurso)
             # Resources, Embalse, Rio, Agente: otros casos legacy
+            # Id: Para algunas métricas como Gene/Sistema, AporEner/Sistema
             recurso = None
-            for col_name in ['Name', 'Values_code', 'Resources', 'Embalse', 'Rio', 'Agente']:
+            for col_name in ['Name', 'Values_code', 'Id', 'Resources', 'Embalse', 'Rio', 'Agente']:
                 if col_name in df.columns:
                     recurso = row.get(col_name)
                     if pd.notna(recurso):
                         recurso = str(recurso)
+                        # NORMALIZAR 'Sistema' → '_SISTEMA_' para evitar duplicados
+                        if recurso.strip().lower() == 'sistema':
+                            recurso = '_SISTEMA_'
                     break
             
             # FIX MAPEO EMBALSES: API devuelve nombres completos, necesitamos códigos
@@ -316,7 +321,7 @@ def poblar_metrica(obj_api, config, usar_timeout=True, timeout_seconds=60):
             if entity == 'Embalse' and recurso is not None:
                 # Obtener mapeo nombre→código desde catálogo
                 catalogos_nombres = db_manager.get_catalogo('ListadoEmbalses')
-                if catalogos_nombres:
+                if catalogos_nombres is not None and len(catalogos_nombres) > 0:
                     # Crear diccionario {nombre: codigo}
                     nombre_a_codigo = {str(item['nombre']).strip().upper(): str(item['codigo']).strip() 
                                        for item in catalogos_nombres}
