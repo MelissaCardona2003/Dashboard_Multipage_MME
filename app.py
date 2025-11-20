@@ -73,6 +73,25 @@ app = Dash(
 # El servidor para Gunicorn
 server = app.server
 
+# ✅ HEALTH CHECK ENDPOINT
+from flask import jsonify
+from utils.health_check import verificar_salud_sistema
+
+@server.route('/health')
+def health_check():
+    """Endpoint para monitoreo de salud del sistema"""
+    salud = verificar_salud_sistema()
+    
+    # Determinar código HTTP según status
+    if salud['status'] == 'healthy':
+        status_code = 200
+    elif salud['status'] == 'degraded':
+        status_code = 200  # Aún funcional, pero con warnings
+    else:
+        status_code = 503  # Service Unavailable
+    
+    return jsonify(salud), status_code
+
 # AHORA importar y registrar las páginas manualmente
 import pages.index_simple_working
 import pages.generacion_fuentes_unificado
