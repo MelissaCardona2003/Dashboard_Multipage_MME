@@ -126,7 +126,7 @@ def obtener_metricas_hidricas():
                 
                 if media_promedio > 0:
                     aporte_pct = round((aportes_promedio / media_promedio) * 100, 2)
-                    aporte_gwh = media_promedio  # XM muestra media histórica
+                    aporte_gwh = aportes_promedio  # FIX: Mostrar aporte real, no media histórica
                     fecha_aporte = fecha_fin_aportes
                     print(f"✅ Aportes: {aporte_pct}% (Real: {aportes_promedio:.2f} GWh, Hist: {media_promedio:.2f} GWh) - Fecha: {fecha_fin_aportes.strftime('%Y-%m-%d')}")
                 else:
