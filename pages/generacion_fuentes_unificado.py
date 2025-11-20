@@ -103,20 +103,23 @@ def obtener_listado_recursos(tipo_fuente='EOLICA'):
     """
     from utils.db_manager import get_catalogo
     
+    import time as time_module
+    with open('/home/admonctrlxm/server/logs/timing.log', 'a') as f:
+        f.write(f"[{time_module.strftime('%H:%M:%S')}] Obteniendo ListadoRecursos para {tipo_fuente}...\n")
     logger.info(f"🔍 Obteniendo ListadoRecursos desde SQLite ({tipo_fuente})...")
     
     try:
-        # PASO 1: Obtener catálogo completo desde SQLite
-        catalogos = get_catalogo('ListadoRecursos')
+        # PASO 1: Obtener catálogo completo desde SQLite (devuelve DataFrame)
+        df_recursos = get_catalogo('ListadoRecursos')
         
-        if not catalogos:
+        if df_recursos is None or df_recursos.empty:
+            print(f"[ERROR] Catálogo ListadoRecursos vacío!", flush=True)
             logger.warning("⚠️ Catálogo ListadoRecursos vacío en SQLite, intentando API...")
             # Fallback a API solo si SQLite falla
             return obtener_listado_recursos_desde_api(tipo_fuente)
         
-        # Convertir lista de dicts a DataFrame
-        df_recursos = pd.DataFrame(catalogos)
-        
+        with open('/home/admonctrlxm/server/logs/timing.log', 'a') as f:
+            f.write(f"[{time_module.strftime('%H:%M:%S')}] SQLite: {len(df_recursos)} recursos\n")
         logger.info(f"✅ SQLite: {len(df_recursos)} recursos obtenidos")
         
         # Renombrar columnas para compatibilidad con código existente
@@ -414,26 +417,31 @@ def obtener_generacion_agregada_por_tipo(fecha_inicio, fecha_fin, tipo_fuente='H
     
     start_time = time.time()
     
+    with open('/home/admonctrlxm/server/logs/timing.log', 'a') as f:
+        f.write(f"\n[{time.strftime('%H:%M:%S')}] === Consultando {tipo_fuente} ({fecha_inicio} → {fecha_fin}) ===\n")
     logger.info(f"🚀 Consultando {tipo_fuente} desde {fecha_inicio} hasta {fecha_fin}")
     
     try:
         # ═══════════════════════════════════════════════════════════════
         # PASO 1: OBTENER LISTADO DE RECURSOS PARA FILTRAR POR TIPO
         # ═══════════════════════════════════════════════════════════════
+        t1 = time.time()
         listado = obtener_listado_recursos(tipo_fuente)
+        with open('/home/admonctrlxm/server/logs/timing.log', 'a') as f:
+            f.write(f"[{time.strftime('%H:%M:%S')}] obtener_listado_recursos: {(time.time()-t1)*1000:.0f}ms\n")
         
         if listado.empty:
             logger.warning(f"⚠️ No se encontraron recursos de tipo {tipo_fuente}")
             return pd.DataFrame()
         
-        # Detectar columna de código
+        # OPTIMIZACIÓN: Columna de código siempre es 'Values_Code' desde SQLite
         fecha_inicio_dt = datetime.strptime(fecha_inicio, '%Y-%m-%d').date()
         fecha_fin_dt = datetime.strptime(fecha_fin, '%Y-%m-%d').date()
         
-        col_sic = _detectar_columna_sic(listado, fecha_inicio_dt, fecha_fin_dt)
+        col_sic = 'Values_Code'  # Columna conocida desde SQLite (obtener_listado_recursos)
         
-        if not col_sic:
-            logger.error("❌ No se encontró columna de código SIC")
+        if col_sic not in listado.columns:
+            logger.error(f"❌ Columna {col_sic} no encontrada. Columnas disponibles: {list(listado.columns)}")
             return pd.DataFrame()
         
         # Filtrar códigos válidos (patrón 3-6 caracteres alfanuméricos)
@@ -450,8 +458,11 @@ def obtener_generacion_agregada_por_tipo(fecha_inicio, fecha_fin, tipo_fuente='H
         # ═══════════════════════════════════════════════════════════════
         # PASO 2: CONSULTAR SQLITE PRIMERO (5 años de datos instantáneos)
         # ═══════════════════════════════════════════════════════════════
+        with open('/home/admonctrlxm/server/logs/timing.log', 'a') as f:
+            f.write(f"[{time.strftime('%H:%M:%S')}] Consultando SQLite con {len(codigos_tipo)} códigos...\n")
         logger.info(f"🔍 Consultando SQLite para {tipo_fuente}...")
         
+        t2 = time.time()
         df_gene = get_metric_data(
             'Gene',
             'Recurso',
@@ -459,6 +470,8 @@ def obtener_generacion_agregada_por_tipo(fecha_inicio, fecha_fin, tipo_fuente='H
             fecha_fin,
             recurso_filter=codigos_tipo  # Filtrar solo códigos de este tipo
         )
+        with open('/home/admonctrlxm/server/logs/timing.log', 'a') as f:
+            f.write(f"[{time.strftime('%H:%M:%S')}] get_metric_data: {(time.time()-t2)*1000:.0f}ms, {len(df_gene) if df_gene is not None else 0} registros\n")
         
         if df_gene is not None and not df_gene.empty:
             logger.info(f"✅ SQLite: {len(df_gene)} registros obtenidos")
@@ -2104,11 +2117,13 @@ def layout():
                     dbc.Col([
                         html.Br(),
                         dbc.Button(
-                            [html.I(className="fas fa-sync-alt me-2"), "Actualizar Datos"],
+                            [html.I(className="fas fa-sync-alt me-2"), "🔄 Refrescar"],
                             id="btn-actualizar-fuentes",
-                            color="primary",
+                            color="secondary",
+                            outline=True,
                             className="w-100",
-                            size="lg"
+                            size="lg",
+                            title="Los datos se cargan automáticamente. Usa este botón solo para refrescar manualmente."
                         )
                     ], md=3)
                 ])
@@ -2132,7 +2147,7 @@ def layout():
                 id='contenedor-fichas-generacion',
                 children=[dbc.Alert([
                     html.I(className="fas fa-hand-pointer me-2"),
-                    html.Strong("Haz clic en 'Actualizar Datos' para cargar los indicadores"),
+                    html.Strong("Cargando indicadores..."),
                     html.Br(),
                     html.Small("(Método optimizado Gene Recurso - carga en 10-15 segundos)")
                 ], color="warning", className="text-center")]
@@ -2154,7 +2169,7 @@ def layout():
             children=html.Div(id="contenido-fuentes", children=[
                 dbc.Alert([
                     html.I(className="fas fa-chart-line me-2"),
-                    "Haz clic en 'Actualizar Datos' para visualizar las gráficas y tablas"
+                    "Cargando gráficas y tablas..."
                 ], color="secondary", className="text-center")
             ])
         ),
@@ -2310,14 +2325,14 @@ def cargar_tabla_resumen(_):
     """Cargar tabla resumen de todas las plantas - LAZY LOAD"""
     return crear_tabla_resumen_todas_plantas()
 
-# Callback - CARGA AUTOMÁTICA al cambiar filtros O hacer clic en botón
+# Callback - CARGA AUTOMÁTICA al cargar página y al cambiar filtros
 @callback(
     Output('contenido-fuentes', 'children'),
-    [Input('btn-actualizar-fuentes', 'n_clicks'),
-     Input('tipo-fuente-dropdown', 'value'),
+    [Input('tipo-fuente-dropdown', 'value'),
      Input('date-range-fuentes', 'start_date'),
-     Input('date-range-fuentes', 'end_date')],
-    prevent_initial_call=False
+     Input('date-range-fuentes', 'end_date'),
+     Input('btn-actualizar-fuentes', 'n_clicks')],
+    prevent_initial_call=False  # ✅ Se ejecuta automáticamente al cargar
 )
 def actualizar_tablero_fuentes(n_clicks, tipos_fuente, fecha_inicio, fecha_fin):
     debug_file = "/home/admonctrlxm/server/logs/debug_callback.log"
