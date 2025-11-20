@@ -34,7 +34,7 @@ def get_connection():
     """
     conn = None
     try:
-        conn = sqlite3.connect(str(DB_PATH), timeout=30.0, check_same_thread=False)
+        conn = sqlite3.connect(str(DB_PATH), timeout=10.0, check_same_thread=False)
         conn.row_factory = sqlite3.Row  # Permite acceso por nombre de columna
         yield conn
     except sqlite3.Error as e:
