@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Actualización incremental del ETL - Solo datos nuevos desde última fecha en BD
+Usa las MISMAS conversiones que etl_xm_to_sqlite.py
 """
 
 import sys
@@ -16,6 +17,45 @@ import pandas as pd
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
+
+# Configuración de conversiones (debe coincidir con etl/config_metricas.py)
+CONVERSION_CONFIG = {
+    'VoluUtilDiarEner': 'kWh_a_GWh',  # API devuelve en kWh
+    'CapaUtilDiarEner': 'kWh_a_GWh',  # API devuelve en kWh
+    'AporEner': 'Wh_a_GWh',           # API devuelve en Wh
+    'AporEnerMediHist': 'Wh_a_GWh',   # API devuelve en Wh
+    'Gene': 'horas_a_diario',         # Sumar Values_Hour01-24 en kWh → GWh
+    'DemaCome': 'horas_a_diario'      # Sumar Values_Hour01-24 en kWh → GWh
+}
+
+def convertir_valor(df, metrica, valor):
+    """
+    Convierte el valor según el tipo de métrica usando las reglas del ETL original
+    
+    Conversiones:
+    - Wh_a_GWh: Divide por 1,000,000 (no 1e9)
+    - kWh_a_GWh: Divide por 1,000,000 (no 1e9)
+    - horas_a_diario: Suma Values_Hour01-24 y divide por 1,000,000
+    """
+    conversion = CONVERSION_CONFIG.get(metrica)
+    
+    if conversion == 'Wh_a_GWh':
+        return valor / 1_000_000  # Wh → GWh
+    elif conversion == 'kWh_a_GWh':
+        return valor / 1_000_000  # kWh → GWh
+    elif conversion == 'horas_a_diario':
+        # Si el DataFrame tiene columnas Values_Hour*, sumarlas
+        hour_cols = [f'Values_Hour{i:02d}' for i in range(1, 25)]
+        existing_cols = [col for col in hour_cols if col in df.columns]
+        if existing_cols:
+            # Retornar None para indicar que se debe sumar después
+            return None
+        else:
+            # Si no hay columnas horarias, convertir el valor directo
+            return valor / 1_000_000
+    else:
+        # Sin conversión, retornar el valor original
+        return valor
 
 DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'portal_energetico.db')
 
@@ -70,16 +110,42 @@ def actualizar_metrica(api, metrica, entidad, nombre):
         
         # Preparar datos para inserción
         metrics_data = []
+        
+        # Para métricas con horas, sumar primero
+        conversion = CONVERSION_CONFIG.get(metrica)
+        if conversion == 'horas_a_diario':
+            hour_cols = [f'Values_Hour{i:02d}' for i in range(1, 25)]
+            existing_cols = [col for col in hour_cols if col in df.columns]
+            
+            if existing_cols:
+                # Sumar todas las horas por fila
+                df_processed = df.copy()
+                df_processed['Value'] = df_processed[existing_cols].sum(axis=1) / 1_000_000  # kWh → GWh
+                logger.info(f"   ✅ Sumadas {len(existing_cols)} horas, promedio: {df_processed['Value'].mean():.2f} GWh")
+                df = df_processed
+        
         for _, row in df.iterrows():
             fecha = row['Date'] if isinstance(row['Date'], str) else row['Date'].strftime('%Y-%m-%d')
-            valor = row.get('Values_Hour24', row.get('Values_Energy', row.get('Value', 0)))
-            recurso_val = row.get('Values_code', '_SISTEMA_')
             
-            # Convertir Wh a GWh si es necesario
-            if valor > 1000:  # Probablemente en Wh
-                valor = valor / 1e9
+            # Obtener valor crudo
+            valor_raw = row.get('Value', 0)
             
-            metrics_data.append((fecha, metrica, entidad, recurso_val, valor, 'GWh'))
+            # Detectar recurso: priorizar Name (embalses), luego Values_code, luego _SISTEMA_
+            if 'Name' in df.columns and pd.notna(row.get('Name')):
+                recurso_val = row['Name']
+            elif 'Values_code' in df.columns and pd.notna(row.get('Values_code')):
+                recurso_val = row['Values_code']
+            else:
+                recurso_val = '_SISTEMA_'
+            
+            # Convertir usando la función correcta
+            valor_convertido = convertir_valor(df, metrica, valor_raw)
+            
+            # Si la función retorna None, significa que ya se procesó en el paso anterior
+            if valor_convertido is None:
+                valor_convertido = valor_raw  # Ya está convertido en el DataFrame
+            
+            metrics_data.append((fecha, metrica, entidad, recurso_val, valor_convertido, 'GWh'))
         
         # Insertar en BD
         registros = upsert_metrics_bulk(metrics_data)
@@ -100,19 +166,24 @@ def actualizar_metrica(api, metrica, entidad, nombre):
 def main():
     logger.info("\n" + "="*60)
     logger.info("⚡ ACTUALIZACIÓN INCREMENTAL - SOLO DATOS NUEVOS")
+    logger.info("⚙️  Usando conversiones del ETL original:")
+    logger.info("   • Wh → GWh: ÷ 1,000,000")
+    logger.info("   • kWh → GWh: ÷ 1,000,000")
+    logger.info("   • Horas → Diario: Sumar 24 horas")
     logger.info("="*60)
     logger.info(f"Inicio: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
     
     api = get_objetoAPI()
     
     # Métricas críticas para las fichas del dashboard
+    # Conversiones deben coincidir con etl/config_metricas.py
     metricas = [
-        ('VoluUtilDiarEner', 'Embalse', 'Volumen Útil Diario'),
-        ('CapaUtilDiarEner', 'Embalse', 'Capacidad Útil Diario'),
-        ('AporEner', 'Sistema', 'Aportes Energía Sistema'),
-        ('AporEnerMediHist', 'Sistema', 'Aportes Media Histórica'),
-        ('Gene', 'Sistema', 'Generación Sistema'),
-        ('DemaCome', 'Sistema', 'Demanda Comercial'),
+        ('VoluUtilDiarEner', 'Embalse', 'Volumen Útil Diario (kWh→GWh)'),
+        ('CapaUtilDiarEner', 'Embalse', 'Capacidad Útil Diario (kWh→GWh)'),
+        ('AporEner', 'Sistema', 'Aportes Energía Sistema (Wh→GWh)'),
+        ('AporEnerMediHist', 'Sistema', 'Aportes Media Histórica (Wh→GWh)'),
+        ('Gene', 'Sistema', 'Generación Sistema (24h→GWh)'),
+        ('DemaCome', 'Sistema', 'Demanda Comercial (24h→GWh)'),
     ]
     
     total_registros = 0
