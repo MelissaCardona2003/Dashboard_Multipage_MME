@@ -67,3 +67,4 @@ fix_syntax.py
 # Archivos de configuración local
 .env
 config_local.py
+portal_energetico.db
