@@ -29,7 +29,14 @@ logger = logging.getLogger(__name__)
 class AutoCorrector:
     """Corrige automáticamente problemas de datos en SQLite"""
     
-    def __init__(self, db_path: str = 'data/portal_energetico.db', dry_run: bool = False):
+    def __init__(self, db_path: str = 'portal_energetico.db', dry_run: bool = False):
+        # Si es ruta relativa, construir desde directorio del script
+        if not os.path.isabs(db_path):
+            # Desde scripts/, subir a raíz del proyecto
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            project_root = os.path.dirname(script_dir)
+            db_path = os.path.join(project_root, db_path)
+        
         self.db_path = db_path
         self.dry_run = dry_run
         self.estadisticas = {
@@ -60,9 +67,9 @@ class AutoCorrector:
             
             # Detectar duplicados
             cursor.execute("""
-                SELECT metrica, recurso, fecha, COUNT(*) as count
-                FROM metricas_temporales
-                GROUP BY metrica, recurso, fecha
+                SELECT metrica, entidad, recurso, fecha, COUNT(*) as count
+                FROM metrics
+                GROUP BY metrica, entidad, recurso, fecha
                 HAVING COUNT(*) > 1
             """)
             
@@ -77,23 +84,24 @@ class AutoCorrector:
             
             for dup in duplicados:
                 metrica = dup['metrica']
+                entidad = dup['entidad']
                 recurso = dup['recurso']
                 fecha = dup['fecha']
                 count = dup['count']
                 
-                logger.info(f"   🔄 {metrica}/{recurso}/{fecha}: {count} duplicados")
+                logger.info(f"   🔄 {metrica}/{entidad}/{recurso}/{fecha}: {count} duplicados")
                 
                 if not self.dry_run:
                     # Eliminar todos excepto el último (mayor id)
                     cursor.execute("""
-                        DELETE FROM metricas_temporales
+                        DELETE FROM metrics
                         WHERE id NOT IN (
                             SELECT MAX(id)
-                            FROM metricas_temporales
-                            WHERE metrica = ? AND recurso = ? AND fecha = ?
+                            FROM metrics
+                            WHERE metrica = ? AND entidad = ? AND recurso = ? AND fecha = ?
                         )
-                        AND metrica = ? AND recurso = ? AND fecha = ?
-                    """, (metrica, recurso, fecha, metrica, recurso, fecha))
+                        AND metrica = ? AND entidad = ? AND recurso = ? AND fecha = ?
+                    """, (metrica, entidad, recurso, fecha, metrica, entidad, recurso, fecha))
                     
                     eliminados = cursor.rowcount
                     total_eliminados += eliminados
@@ -126,8 +134,8 @@ class AutoCorrector:
             
             # Detectar fechas futuras
             cursor.execute("""
-                SELECT metrica, recurso, fecha, valor_gwh
-                FROM metricas_temporales
+                SELECT metrica, entidad, recurso, fecha, valor_gwh
+                FROM metrics
                 WHERE fecha > ?
                 ORDER BY fecha DESC
             """, (fecha_maxima,))
@@ -149,7 +157,7 @@ class AutoCorrector:
             if not self.dry_run:
                 # Eliminar fechas futuras
                 cursor.execute("""
-                    DELETE FROM metricas_temporales
+                    DELETE FROM metrics
                     WHERE fecha > ?
                 """, (fecha_maxima,))
                 
@@ -179,7 +187,7 @@ class AutoCorrector:
             # Detectar recursos no normalizados
             cursor.execute("""
                 SELECT DISTINCT recurso
-                FROM metricas_temporales
+                FROM metrics
                 WHERE LOWER(recurso) = 'sistema' AND recurso != '_SISTEMA_'
             """)
             
@@ -196,7 +204,7 @@ class AutoCorrector:
             if not self.dry_run:
                 # Normalizar
                 cursor.execute("""
-                    UPDATE metricas_temporales
+                    UPDATE metrics
                     SET recurso = '_SISTEMA_'
                     WHERE LOWER(recurso) = 'sistema' AND recurso != '_SISTEMA_'
                 """)
@@ -226,8 +234,8 @@ class AutoCorrector:
             
             # Detectar valores negativos
             cursor.execute("""
-                SELECT metrica, recurso, fecha, valor_gwh
-                FROM metricas_temporales
+                SELECT metrica, entidad, recurso, fecha, valor_gwh
+                FROM metrics
                 WHERE valor_gwh < 0
             """)
             
@@ -236,12 +244,12 @@ class AutoCorrector:
             
             if valores_negativos:
                 for val in valores_negativos[:5]:
-                    logger.info(f"   ⚠️  {val['metrica']}/{val['recurso']}/{val['fecha']}: {val['valor_gwh']} GWh")
+                    logger.info(f"   ⚠️  {val['metrica']}/{val['entidad']}/{val['recurso']}/{val['fecha']}: {val['valor_gwh']} GWh")
             
             # Detectar valores extremos (> 10,000 GWh en generación)
             cursor.execute("""
-                SELECT metrica, recurso, fecha, valor_gwh
-                FROM metricas_temporales
+                SELECT metrica, entidad, recurso, fecha, valor_gwh
+                FROM metrics
                 WHERE metrica = 'Gene' AND valor_gwh > 10000
             """)
             
@@ -257,14 +265,14 @@ class AutoCorrector:
             if not self.dry_run:
                 # Eliminar valores negativos
                 cursor.execute("""
-                    DELETE FROM metricas_temporales
+                    DELETE FROM metrics
                     WHERE valor_gwh < 0
                 """)
                 eliminados_neg = cursor.rowcount
                 
                 # Eliminar valores extremos
                 cursor.execute("""
-                    DELETE FROM metricas_temporales
+                    DELETE FROM metrics
                     WHERE metrica = 'Gene' AND valor_gwh > 10000
                 """)
                 eliminados_ext = cursor.rowcount
@@ -329,8 +337,8 @@ def main():
     parser = argparse.ArgumentParser(description='Auto-corrección de datos SQLite')
     parser.add_argument('--dry-run', action='store_true', 
                        help='Modo de prueba (no hace cambios reales)')
-    parser.add_argument('--db', default='data/portal_energetico.db',
-                       help='Ruta a la base de datos SQLite')
+    parser.add_argument('--db', default='portal_energetico.db',
+                       help='Ruta a la base de datos SQLite (relativa a raíz proyecto o absoluta)')
     
     args = parser.parse_args()
     

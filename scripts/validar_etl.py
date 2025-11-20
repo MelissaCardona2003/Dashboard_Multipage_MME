@@ -16,9 +16,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 import sqlite3
 from datetime import datetime, timedelta
-from pydataxm import ReadDB
 import logging
 from typing import Dict, List, Tuple
+
+# Importar desde utils la función para obtener API XM
+from utils._xm import get_objetoAPI
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger(__name__)
@@ -27,9 +29,15 @@ logger = logging.getLogger(__name__)
 class ValidadorETL:
     """Valida que los datos en SQLite coincidan con la API XM"""
     
-    def __init__(self, db_path: str = 'data/portal_energetico.db'):
+    def __init__(self, db_path: str = 'portal_energetico.db'):
+        # Si es ruta relativa, construir desde directorio del script
+        if not os.path.isabs(db_path):
+            db_path = os.path.join(os.path.dirname(__file__), '..', db_path)
+        
         self.db_path = db_path
-        self.api = ReadDB()
+        self.api = get_objetoAPI()
+        if not self.api:
+            logger.error("❌ No se pudo inicializar la API XM")
         self.resultados = {
             'metricas_validadas': 0,
             'metricas_correctas': 0,
@@ -47,27 +55,36 @@ class ValidadorETL:
             logger.error(f"❌ Error al conectar a SQLite: {e}")
             return None
     
-    def obtener_ultima_fecha_sqlite(self, conn, metrica: str, entidad: str) -> Tuple[str, float]:
+    def obtener_ultima_fecha_sqlite(self, conn, metrica: str, entidad: str) -> Tuple[datetime, float]:
         """Obtiene la última fecha y valor de SQLite"""
         try:
             cursor = conn.cursor()
+            # La tabla se llama 'metrics', los campos son 'fecha', 'metrica', 'entidad', 'valor_gwh'
             cursor.execute("""
                 SELECT fecha, valor_gwh 
-                FROM metricas_temporales 
-                WHERE metrica = ? AND recurso = ?
+                FROM metrics 
+                WHERE metrica = ? AND entidad = ?
                 ORDER BY fecha DESC 
                 LIMIT 1
             """, (metrica, entidad))
             
             row = cursor.fetchone()
             if row:
-                return row['fecha'], row['valor_gwh']
+                # Convertir fecha a datetime object (puede venir como string o ya ser datetime/Timestamp)
+                fecha = row['fecha']
+                if isinstance(fecha, str):
+                    fecha_dt = datetime.strptime(fecha, '%Y-%m-%d')
+                elif hasattr(fecha, 'to_pydatetime'):  # pandas Timestamp
+                    fecha_dt = fecha.to_pydatetime()
+                else:
+                    fecha_dt = fecha  # Ya es datetime
+                return fecha_dt, row['valor_gwh']
             return None, None
         except Exception as e:
             logger.error(f"❌ Error al consultar SQLite: {e}")
             return None, None
     
-    def obtener_ultima_fecha_api(self, metrica: str, entidad: str) -> Tuple[str, float]:
+    def obtener_ultima_fecha_api(self, metrica: str, entidad: str) -> Tuple[datetime, float]:
         """Obtiene la última fecha y valor de la API XM"""
         try:
             # Calcular rango de fechas (últimos 7 días)
@@ -90,9 +107,17 @@ class ValidadorETL:
             ultima_fila = df.iloc[0]
             
             fecha = ultima_fila['Date']
+            # Convertir a datetime si es string o Timestamp
+            if isinstance(fecha, str):
+                fecha_dt = datetime.strptime(fecha, '%Y-%m-%d')
+            elif hasattr(fecha, 'to_pydatetime'):
+                fecha_dt = fecha.to_pydatetime()
+            else:
+                fecha_dt = fecha
+                
             valor = ultima_fila.get('Values_Hour24', ultima_fila.get('Values_Energy', None))
             
-            return fecha, valor
+            return fecha_dt, valor
         except Exception as e:
             logger.error(f"❌ Error al consultar API XM ({metrica}/{entidad}): {e}")
             return None, None
@@ -127,8 +152,11 @@ class ValidadorETL:
                 self.resultados['errores'].append(f"{nombre_amigable}: Datos no disponibles")
                 return False
             
-            # Comparar fechas
-            if fecha_sqlite == fecha_api:
+            # Comparar fechas (convertir a date para comparar solo día, mes, año)
+            fecha_sqlite_date = fecha_sqlite.date() if hasattr(fecha_sqlite, 'date') else fecha_sqlite
+            fecha_api_date = fecha_api.date() if hasattr(fecha_api, 'date') else fecha_api
+            
+            if fecha_sqlite_date == fecha_api_date:
                 logger.info(f"✅ {nombre_amigable}: Fechas coinciden")
                 
                 # Comparar valores (con tolerancia del 0.1%)
@@ -148,20 +176,19 @@ class ValidadorETL:
                         return False
             else:
                 # Verificar si SQLite está adelantado (datos inventados)
-                if fecha_sqlite > fecha_api:
+                if fecha_sqlite_date > fecha_api_date:
                     logger.error(f"❌ {nombre_amigable}: ¡SQLite tiene fecha FUTURA!")
-                    logger.error(f"   SQLite: {fecha_sqlite}, API: {fecha_api}")
+                    logger.error(f"   SQLite: {fecha_sqlite_date}, API: {fecha_api_date}")
                     self.resultados['errores'].append(
-                        f"{nombre_amigable}: Fecha inventada (SQLite: {fecha_sqlite}, API: {fecha_api})"
+                        f"{nombre_amigable}: Fecha inventada (SQLite: {fecha_sqlite_date}, API: {fecha_api_date})"
                     )
                     self.resultados['metricas_incorrectas'] += 1
                     return False
                 else:
                     # SQLite está atrasado (no es crítico, puede ser actualización pendiente)
-                    dias_atraso = (datetime.strptime(fecha_api, '%Y-%m-%d') - 
-                                  datetime.strptime(fecha_sqlite, '%Y-%m-%d')).days
+                    dias_atraso = (fecha_api - fecha_sqlite).days
                     logger.warning(f"⚠️  {nombre_amigable}: SQLite {dias_atraso} días atrasado")
-                    logger.warning(f"   SQLite: {fecha_sqlite}, API: {fecha_api}")
+                    logger.warning(f"   SQLite: {fecha_sqlite.strftime('%Y-%m-%d')}, API: {fecha_api.strftime('%Y-%m-%d')}")
                     
                     if dias_atraso > 2:
                         self.resultados['errores'].append(

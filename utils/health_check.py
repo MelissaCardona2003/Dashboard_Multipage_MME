@@ -13,13 +13,19 @@ from typing import Dict, Any
 import os
 
 
-def verificar_salud_sistema(db_path: str = 'data/portal_energetico.db') -> Dict[str, Any]:
+def verificar_salud_sistema(db_path: str = 'portal_energetico.db') -> Dict[str, Any]:
     """
     Verifica la salud del sistema completo
     
     Returns:
         Dict con status, checks individuales y mensaje
     """
+    # Si es ruta relativa, construir desde directorio raíz
+    if not os.path.isabs(db_path):
+        # utils/health_check.py -> raíz del proyecto
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        db_path = os.path.join(script_dir, '..', db_path)
+    
     resultado = {
         'status': 'healthy',
         'timestamp': datetime.now().isoformat(),
@@ -50,11 +56,11 @@ def verificar_salud_sistema(db_path: str = 'data/portal_energetico.db') -> Dict[
         if db_size_mb < 100:
             resultado['warnings'].append(f'Base de datos pequeña: {db_size_mb:.2f} MB')
         
-        # 3. Verificar tablas principales
+        # Verificar tablas principales
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
         tablas = [row['name'] for row in cursor.fetchall()]
         
-        tablas_requeridas = ['metricas_temporales', 'catalogo_recursos']
+        tablas_requeridas = ['metrics', 'catalogos']
         tablas_faltantes = [t for t in tablas_requeridas if t not in tablas]
         
         if tablas_faltantes:
@@ -65,7 +71,7 @@ def verificar_salud_sistema(db_path: str = 'data/portal_energetico.db') -> Dict[
         resultado['checks']['tables_found'] = len(tablas)
         
         # 4. Verificar cantidad de registros
-        cursor.execute("SELECT COUNT(*) as count FROM metricas_temporales")
+        cursor.execute("SELECT COUNT(*) as count FROM metrics")
         total_registros = cursor.fetchone()['count']
         resultado['checks']['total_records'] = total_registros
         
@@ -75,8 +81,8 @@ def verificar_salud_sistema(db_path: str = 'data/portal_energetico.db') -> Dict[
         # 5. Verificar frescura de los datos
         cursor.execute("""
             SELECT MAX(fecha) as fecha_max
-            FROM metricas_temporales
-            WHERE metrica = 'Gene' AND recurso = '_SISTEMA_'
+            FROM metrics
+            WHERE metrica = 'Gene' AND entidad = 'Sistema' AND recurso = '_SISTEMA_'
         """)
         
         row = cursor.fetchone()
@@ -101,9 +107,9 @@ def verificar_salud_sistema(db_path: str = 'data/portal_energetico.db') -> Dict[
         cursor.execute("""
             SELECT COUNT(*) as count
             FROM (
-                SELECT metrica, recurso, fecha, COUNT(*) as n
-                FROM metricas_temporales
-                GROUP BY metrica, recurso, fecha
+                SELECT metrica, entidad, recurso, fecha, COUNT(*) as n
+                FROM metrics
+                GROUP BY metrica, entidad, recurso, fecha
                 HAVING COUNT(*) > 1
             )
         """)
@@ -121,8 +127,8 @@ def verificar_salud_sistema(db_path: str = 'data/portal_energetico.db') -> Dict[
         for metrica in metricas_criticas:
             cursor.execute("""
                 SELECT COUNT(*) as count
-                FROM metricas_temporales
-                WHERE metrica = ? AND recurso = '_SISTEMA_'
+                FROM metrics
+                WHERE metrica = ? AND entidad = 'Sistema' AND recurso = '_SISTEMA_'
             """, (metrica,))
             
             count = cursor.fetchone()['count']
