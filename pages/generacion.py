@@ -101,7 +101,7 @@ def obtener_metricas_hidricas():
                     print(f"✅ Reservas: {reserva_pct}% ({reserva_gwh:.2f} GWh) - Fecha: {fecha_vol}")
         
         # === 2. APORTES HÍDRICOS ===
-        # MODIFICACIÓN 2025-11-19: Usar SQLite (ya tiene datos en GWh) en lugar de API
+        # Calcular promedio del mes actual hasta la fecha
         aporte_pct, aporte_gwh, fecha_aporte = None, None, None
         
         # Buscar última fecha disponible en SQLite
@@ -120,13 +120,14 @@ def obtener_metricas_hidricas():
             df_media_hist = get_metric_data('AporEnerMediHist', 'Sistema', fecha_inicio_str, fecha_fin_str)
             
             if df_aportes is not None and not df_aportes.empty and df_media_hist is not None and not df_media_hist.empty:
-                # SQLite ya tiene datos en GWh (conversión Wh→GWh en ETL)
+                # SQLite ya tiene datos en GWh (conversión Wh→GWh hecha por ETL)
                 aportes_promedio = df_aportes['valor_gwh'].mean()
                 media_promedio = df_media_hist['valor_gwh'].mean()
                 
                 if media_promedio > 0:
                     aporte_pct = round((aportes_promedio / media_promedio) * 100, 2)
-                    aporte_gwh = aportes_promedio  # FIX: Mostrar aporte real, no media histórica
+                    # Mostrar la Media Histórica en GWh (igual que XM)
+                    aporte_gwh = media_promedio
                     fecha_aporte = fecha_fin_aportes
                     print(f"✅ Aportes: {aporte_pct}% (Real: {aportes_promedio:.2f} GWh, Hist: {media_promedio:.2f} GWh) - Fecha: {fecha_fin_aportes.strftime('%Y-%m-%d')}")
                 else:
