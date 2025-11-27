@@ -35,32 +35,114 @@ warnings.filterwarnings("ignore")
 
 register_page(
     __name__,
-    path="/distribucion/demanda",
-    name="Demanda por Agente",
-    title="Tablero Demanda por Agente - Ministerio de Minas y Energía de Colombia",
-    order=11
+    path="/distribucion",
+    name="Distribución Eléctrica",
+    title="Distribución Eléctrica - Demanda por Agente - Ministerio de Minas y Energía",
+    order=10
 )
 
 def obtener_listado_agentes():
-    """Obtener el listado de agentes del sistema"""
+    """Obtener el listado de agentes ordenados por cantidad de datos y con advertencias"""
     try:
+        import sqlite3
+        from utils.db_manager import DB_PATH
+        
+        # Paso 1: Obtener estadísticas de datos por agente
+        conn = sqlite3.connect(str(DB_PATH))
+        query = """
+        SELECT 
+            recurso as code,
+            COUNT(*) as total_registros,
+            COUNT(DISTINCT fecha) as dias_unicos,
+            COUNT(DISTINCT metrica) as metricas_distintas,
+            MIN(fecha) as fecha_min,
+            MAX(fecha) as fecha_max
+        FROM metrics
+        WHERE entidad = 'Agente' 
+        AND metrica IN ('DemaCome', 'DemaReal', 'DemaRealReg', 'DemaRealNoReg')
+        AND recurso IS NOT NULL
+        GROUP BY recurso
+        ORDER BY total_registros DESC, dias_unicos DESC
+        """
+        
+        agentes_estadisticas = pd.read_sql_query(query, conn)
+        conn.close()
+        
+        if agentes_estadisticas.empty:
+            logger.warning("⚠️ No se encontraron agentes con datos en la base")
+            return pd.DataFrame()
+        
+        logger.info(f"📊 {len(agentes_estadisticas)} agentes con datos encontrados")
+        
+        # Calcular advertencias para cada agente
+        fecha_actual = date.today()
+        dias_del_ano = (fecha_actual - date(fecha_actual.year, 1, 1)).days + 1
+        
+        def generar_advertencia(row):
+            advertencias = []
+            
+            # Verificar si tiene menos de 100 días de datos
+            if row['dias_unicos'] < 100:
+                advertencias.append(f"⚠️ Solo {row['dias_unicos']} días")
+            
+            # Verificar si le faltan métricas (debería tener al menos 2: DemaCome y DemaReal)
+            if row['metricas_distintas'] < 2:
+                advertencias.append("⚠️ Datos incompletos")
+            
+            # Verificar si los datos son muy antiguos (último dato hace más de 30 días)
+            try:
+                fecha_max = pd.to_datetime(row['fecha_max']).date()
+                dias_desde_ultimo = (fecha_actual - fecha_max).days
+                if dias_desde_ultimo > 30:
+                    advertencias.append(f"⚠️ Último dato: {dias_desde_ultimo} días atrás")
+            except:
+                pass
+            
+            return " | ".join(advertencias) if advertencias else ""
+        
+        agentes_estadisticas['advertencia'] = agentes_estadisticas.apply(generar_advertencia, axis=1)
+        
+        # Paso 2: Obtener catálogo para mapear códigos a nombres
         fecha_fin = date.today() - timedelta(days=1)
         fecha_inicio = fecha_fin - timedelta(days=7)
         
-        # ✅ OPTIMIZADO: Usar fetch_metric_data con cache
-        agentes = fetch_metric_data("ListadoAgentes", "Sistema", 
-                                     fecha_inicio.strftime('%Y-%m-%d'), 
-                                     fecha_fin.strftime('%Y-%m-%d'))
+        catalogo, warning = obtener_datos_inteligente("ListadoAgentes", "Sistema", 
+                                                      fecha_inicio.strftime('%Y-%m-%d'), 
+                                                      fecha_fin.strftime('%Y-%m-%d'))
         
-        if agentes is not None and not agentes.empty:
+        if catalogo is not None and not catalogo.empty and 'Values_Code' in catalogo.columns:
+            # Hacer merge para agregar nombres
+            agentes = agentes_estadisticas.merge(
+                catalogo[['Values_Code', 'Values_Name', 'Values_State']], 
+                left_on='code', 
+                right_on='Values_Code', 
+                how='left'
+            )
+            
             # Filtrar solo agentes activos
             if 'Values_State' in agentes.columns:
                 agentes = agentes[agentes['Values_State'] == 'OPERACION'].copy()
+            
+            # Asegurar que tenga las columnas necesarias
+            if 'Values_Code' not in agentes.columns:
+                agentes['Values_Code'] = agentes['code']
+            if 'Values_Name' not in agentes.columns:
+                agentes['Values_Name'] = agentes['code']
+            
+            # Ordenar por total de registros (descendente)
+            agentes = agentes.sort_values('total_registros', ascending=False)
+            
+            logger.info(f"✅ {len(agentes)} agentes disponibles (ordenados por cantidad de datos)")
             return agentes
-        print("No se obtuvieron agentes")
-        return pd.DataFrame()
+        else:
+            # Si no hay catálogo, usar códigos directamente
+            agentes_estadisticas['Values_Code'] = agentes_estadisticas['code']
+            agentes_estadisticas['Values_Name'] = agentes_estadisticas['code']
+            logger.info(f"✅ {len(agentes_estadisticas)} agentes disponibles (solo códigos)")
+            return agentes_estadisticas
+            
     except Exception as e:
-        print(f"Error obteniendo listado de agentes: {e}")
+        logger.error(f"❌ Error obteniendo listado de agentes: {e}")
         traceback.print_exc()
     return pd.DataFrame()
 
@@ -81,11 +163,8 @@ def obtener_demanda_comercial(fecha_inicio, fecha_fin, codigos_agentes=None):
         
         # Filtrar por códigos si se proporcionan
         if codigos_agentes:
-            import sys
-            sys.stderr.write(f"🔍 COLUMNAS DISPONIBLES: {df.columns.tolist()}\n")
-            sys.stderr.write(f"🔍 FILTRANDO por agentes: {codigos_agentes}\n")
-            sys.stderr.write(f"🔍 Registros antes del filtro: {len(df)}\n")
-            sys.stderr.flush()
+            logger.info(f"🔍 Filtrando DemaCome por agentes: {codigos_agentes}")
+            logger.info(f"🔍 Registros antes del filtro: {len(df)}")
             
             # Buscar la columna correcta (puede ser Values_code o Values_Code)
             code_column = None
@@ -95,12 +174,18 @@ def obtener_demanda_comercial(fecha_inicio, fecha_fin, codigos_agentes=None):
                 code_column = 'Values_Code'
             
             if code_column:
+                # Mostrar algunos códigos disponibles para debug
+                codigos_disponibles = df[code_column].unique()
+                logger.info(f"📊 Códigos disponibles (primeros 10): {codigos_disponibles[:10].tolist()}")
+                
                 df = df[df[code_column].isin(codigos_agentes)].copy()
-                sys.stderr.write(f"✅ Registros después del filtro: {len(df)}\n")
-                sys.stderr.flush()
+                logger.info(f"✅ Registros después del filtro: {len(df)}")
+                
+                if len(df) == 0:
+                    logger.warning(f"⚠️ No se encontraron datos para agentes: {codigos_agentes}")
             else:
-                sys.stderr.write(f"❌ No se encontró columna de código\n")
-                sys.stderr.flush()
+                logger.error(f"❌ No se encontró columna de código en DemaCome")
+                logger.error(f"❌ Columnas disponibles: {df.columns.tolist()}")
         
         # Procesar datos horarios
         df_procesado = procesar_datos_horarios(df, 'DemaCome')
@@ -115,11 +200,11 @@ def obtener_demanda_comercial(fecha_inicio, fecha_fin, codigos_agentes=None):
 def obtener_demanda_real(fecha_inicio, fecha_fin, codigos_agentes=None):
     """Obtener datos de demanda real por agente"""
     try:
-        # ✅ OPTIMIZADO: Usar fetch_metric_data con cache
+        # ✅ OPTIMIZADO: Usar obtener_datos_inteligente (SQLite)
         # La conversión kWh→GWh se hace después del filtrado
-        df = fetch_metric_data('DemaReal', 'Agente', 
-                               fecha_inicio.strftime('%Y-%m-%d') if hasattr(fecha_inicio, 'strftime') else fecha_inicio,
-                               fecha_fin.strftime('%Y-%m-%d') if hasattr(fecha_fin, 'strftime') else fecha_fin)
+        df, warning = obtener_datos_inteligente('DemaReal', 'Agente', 
+                                                 fecha_inicio.strftime('%Y-%m-%d') if hasattr(fecha_inicio, 'strftime') else fecha_inicio,
+                                                 fecha_fin.strftime('%Y-%m-%d') if hasattr(fecha_fin, 'strftime') else fecha_fin)
         
         if df is None or df.empty:
             print("No se obtuvieron datos de DemaReal")
@@ -127,11 +212,8 @@ def obtener_demanda_real(fecha_inicio, fecha_fin, codigos_agentes=None):
         
         # Filtrar por códigos si se proporcionan
         if codigos_agentes:
-            import sys
-            sys.stderr.write(f"🔍 COLUMNAS DISPONIBLES: {df.columns.tolist()}\n")
-            sys.stderr.write(f"🔍 FILTRANDO por agentes: {codigos_agentes}\n")
-            sys.stderr.write(f"🔍 Registros antes del filtro: {len(df)}\n")
-            sys.stderr.flush()
+            logger.info(f"🔍 Filtrando DemaReal por agentes: {codigos_agentes}")
+            logger.info(f"🔍 Registros antes del filtro: {len(df)}")
             
             # Buscar la columna correcta (puede ser Values_code o Values_Code)
             code_column = None
@@ -141,12 +223,18 @@ def obtener_demanda_real(fecha_inicio, fecha_fin, codigos_agentes=None):
                 code_column = 'Values_Code'
             
             if code_column:
+                # Mostrar algunos códigos disponibles para debug
+                codigos_disponibles = df[code_column].unique()
+                logger.info(f"📊 Códigos disponibles (primeros 10): {codigos_disponibles[:10].tolist()}")
+                
                 df = df[df[code_column].isin(codigos_agentes)].copy()
-                sys.stderr.write(f"✅ Registros después del filtro: {len(df)}\n")
-                sys.stderr.flush()
+                logger.info(f"✅ Registros después del filtro: {len(df)}")
+                
+                if len(df) == 0:
+                    logger.warning(f"⚠️ No se encontraron datos para agentes: {codigos_agentes}")
             else:
-                sys.stderr.write(f"❌ No se encontró columna de código\n")
-                sys.stderr.flush()
+                logger.error(f"❌ No se encontró columna de código en DemaReal")
+                logger.error(f"❌ Columnas disponibles: {df.columns.tolist()}")
         
         # Procesar datos horarios
         df_procesado = procesar_datos_horarios(df, 'DemaReal')
@@ -163,7 +251,7 @@ def procesar_datos_horarios(df, tipo_metrica):
     Procesar datos horarios: sumar las 24 horas y convertir de kWh a GWh
     
     Args:
-        df: DataFrame con columnas Values_Hour01 a Values_Hour24
+        df: DataFrame con columnas Values_Hour01 a Values_Hour24 O con columna Value ya agregada
         tipo_metrica: 'DemaCome' o 'DemaReal'
     
     Returns:
@@ -172,22 +260,41 @@ def procesar_datos_horarios(df, tipo_metrica):
     if df.empty:
         return pd.DataFrame()
     
-    # Identificar columnas de horas
+    # Identificar si los datos vienen con columnas horarias o ya agregados
     cols_horas = [col for col in df.columns if 'Hour' in col]
     
-    # Reemplazar NaN con 0
-    df[cols_horas] = df[cols_horas].fillna(0)
+    if cols_horas:
+        # CASO 1: Datos de API XM con columnas horarias (Values_Hour01-24)
+        # Reemplazar NaN con 0
+        df[cols_horas] = df[cols_horas].fillna(0)
+        
+        # Sumar las 24 horas para obtener total diario en kWh
+        df['Total_kWh'] = df[cols_horas].sum(axis=1)
+        
+        # Convertir de kWh a GWh
+        df['Demanda_GWh'] = df['Total_kWh'] / 1_000_000
+    elif 'Value' in df.columns:
+        # CASO 2: Datos de SQLite con valor ya agregado en GWh
+        df['Demanda_GWh'] = df['Value']
+    else:
+        logger.error(f"❌ procesar_datos_horarios: No se encontraron columnas horarias ni Value")
+        return pd.DataFrame()
     
-    # Sumar las 24 horas para obtener total diario en kWh
-    df['Total_kWh'] = df[cols_horas].sum(axis=1)
+    # Detectar columna de código de agente
+    codigo_col = None
+    for col_name in ['Values_code', 'recurso', 'Name']:
+        if col_name in df.columns:
+            codigo_col = col_name
+            break
     
-    # Convertir de kWh a GWh
-    df['Demanda_GWh'] = df['Total_kWh'] / 1_000_000
+    if codigo_col is None:
+        logger.error(f"❌ procesar_datos_horarios: No se encontró columna de código de agente")
+        return pd.DataFrame()
     
     # Preparar DataFrame resultado
     df_resultado = pd.DataFrame({
         'Fecha': pd.to_datetime(df['Date']),
-        'Codigo_Agente': df['Values_code'],
+        'Codigo_Agente': df[codigo_col],
         'Demanda_GWh': df['Demanda_GWh'],
         'Tipo': tipo_metrica
     })
@@ -197,24 +304,22 @@ def procesar_datos_horarios(df, tipo_metrica):
 def obtener_demanda_no_atendida(fecha_inicio, fecha_fin):
     """Obtener datos de Demanda No Atendida Programada por Área"""
     try:
-        # ✅ OPTIMIZADO: Usar fetch_metric_data con cache
-        df = fetch_metric_data('DemaNoAtenProg', 'Area', 
-                               fecha_inicio.strftime('%Y-%m-%d') if hasattr(fecha_inicio, 'strftime') else fecha_inicio,
-                               fecha_fin.strftime('%Y-%m-%d') if hasattr(fecha_fin, 'strftime') else fecha_fin)
+        # ✅ OPTIMIZADO: Usar obtener_datos_inteligente (SQLite)
+        df, warning = obtener_datos_inteligente('DemaNoAtenProg', 'Area', 
+                                                 fecha_inicio.strftime('%Y-%m-%d') if hasattr(fecha_inicio, 'strftime') else fecha_inicio,
+                                                 fecha_fin.strftime('%Y-%m-%d') if hasattr(fecha_fin, 'strftime') else fecha_fin)
         
         if df is None or df.empty:
             print("No se obtuvieron datos de Demanda No Atendida")
             return pd.DataFrame()
         
         # Renombrar columnas para mayor claridad
+        # NOTA: Los datos de SQLite ya vienen en GWh (no dividir de nuevo)
         df_resultado = pd.DataFrame({
             'Fecha': pd.to_datetime(df['Date']),
             'Area': df['Name'],
-            'Demanda_No_Atendida_kWh': df['Value']
+            'Demanda_No_Atendida_GWh': df['Value']  # Ya en GWh desde SQLite
         })
-        
-        # Convertir a GWh
-        df_resultado['Demanda_No_Atendida_GWh'] = df_resultado['Demanda_No_Atendida_kWh'] / 1_000_000
         
         # Ordenar por fecha descendente
         df_resultado = df_resultado.sort_values('Fecha', ascending=False)
@@ -228,7 +333,7 @@ def obtener_demanda_no_atendida(fecha_inicio, fecha_fin):
 
 def crear_grafica_lineas_demanda(df_demanda_come, df_demanda_real, agente_nombre=None):
     """
-    Crear gráfica de líneas comparando DemaCome y DemaReal
+    Crear gráfica de líneas comparando DemaCome y DemaReal con barras de diferencia porcentual
     
     Args:
         df_demanda_come: DataFrame con demanda comercial
@@ -238,6 +343,10 @@ def crear_grafica_lineas_demanda(df_demanda_come, df_demanda_real, agente_nombre
     px, go = get_plotly_modules()
     
     fig = go.Figure()
+    
+    # Preparar datos agregados
+    df_come_agg = None
+    df_real_agg = None
     
     # Agregar línea de Demanda Comercial
     if not df_demanda_come.empty:
@@ -251,7 +360,8 @@ def crear_grafica_lineas_demanda(df_demanda_come, df_demanda_real, agente_nombre
             name='Demanda Comercial',
             line=dict(color=COLORS.get('primary', '#0d6efd'), width=2),
             marker=dict(size=6),
-            hovertemplate='<b>Demanda Comercial</b><br>Fecha: %{x}<br>Demanda: %{y:.4f} GWh<extra></extra>'
+            hovertemplate='<b>Demanda Comercial</b><br>Fecha: %{x}<br>Demanda: %{y:.4f} GWh<extra></extra>',
+            yaxis='y'
         ))
     
     # Agregar línea de Demanda Real
@@ -266,7 +376,48 @@ def crear_grafica_lineas_demanda(df_demanda_come, df_demanda_real, agente_nombre
             name='Demanda Real',
             line=dict(color=COLORS.get('success', '#28a745'), width=2, dash='dot'),
             marker=dict(size=6),
-            hovertemplate='<b>Demanda Real</b><br>Fecha: %{x}<br>Demanda: %{y:.4f} GWh<extra></extra>'
+            hovertemplate='<b>Demanda Real</b><br>Fecha: %{x}<br>Demanda: %{y:.4f} GWh<extra></extra>',
+            yaxis='y'
+        ))
+    
+    # Calcular y agregar barras de diferencia porcentual (en valor absoluto)
+    if df_come_agg is not None and df_real_agg is not None and not df_come_agg.empty and not df_real_agg.empty:
+        # Merge para calcular diferencia
+        df_merged = pd.merge(
+            df_come_agg.rename(columns={'Demanda_GWh': 'Come_GWh'}),
+            df_real_agg.rename(columns={'Demanda_GWh': 'Real_GWh'}),
+            on='Fecha',
+            how='inner'
+        )
+        
+        # Calcular diferencia porcentual en valor absoluto
+        # |((Real - Comercial) / Comercial) * 100|
+        df_merged['Diferencia_Pct'] = abs(
+            ((df_merged['Real_GWh'] - df_merged['Come_GWh']) / df_merged['Come_GWh']) * 100
+        )
+        
+        # Calcular diferencia absoluta en GWh para el tooltip
+        df_merged['Diferencia_GWh'] = abs(df_merged['Real_GWh'] - df_merged['Come_GWh'])
+        
+        # Agregar barras de diferencia porcentual en eje Y secundario
+        fig.add_trace(go.Bar(
+            x=df_merged['Fecha'],
+            y=df_merged['Diferencia_Pct'],
+            name='Diferencia Absoluta (%)',
+            marker=dict(
+                color='rgba(158, 158, 158, 0.4)',  # Gris semitransparente
+                line=dict(color='rgba(128, 128, 128, 0.6)', width=1)
+            ),
+            hovertemplate=(
+                '<b>Diferencia</b><br>'
+                'Fecha: %{x}<br>'
+                'Diferencia: %{customdata[0]:.4f} GWh<br>'
+                'Diferencia %: %{y:.2f}%<br>'
+                '<i>(|Real - Comercial| / Comercial)</i>'
+                '<extra></extra>'
+            ),
+            customdata=df_merged[['Diferencia_GWh']].values,
+            yaxis='y2'
         ))
     
     titulo = "Evolución Temporal - Demanda por Agente"
@@ -276,7 +427,16 @@ def crear_grafica_lineas_demanda(df_demanda_come, df_demanda_real, agente_nombre
     fig.update_layout(
         title=titulo,
         xaxis_title="Fecha",
-        yaxis_title="Demanda (GWh)",
+        yaxis=dict(
+            title="Demanda (GWh)",
+            side='left'
+        ),
+        yaxis2=dict(
+            title="Diferencia Absoluta (%)",
+            overlaying='y',
+            side='right',
+            showgrid=False
+        ),
         hovermode='x unified',
         template='plotly_white',
         height=450,
@@ -305,21 +465,28 @@ def crear_tabla_demanda_no_atendida(df_dna, page_current=0, page_size=10):
             html.P("No hay datos de Demanda No Atendida disponibles", 
                    className="text-muted text-center")
         ])
-    
-    # Formatear datos para la tabla
-    df_tabla = df_dna.copy()
-    df_tabla['Fecha'] = df_tabla['Fecha'].dt.strftime('%Y-%m-%d')
-    df_tabla['Demanda_No_Atendida_GWh'] = df_tabla['Demanda_No_Atendida_GWh'].apply(
-        lambda x: f"{x:.4f}"
-    )
-    
+
+
+    # Agrupar por área y sumar la demanda no atendida
+    df_agrupado = df_dna.groupby('Area', as_index=False)['Demanda_No_Atendida_GWh'].sum()
+    # Ordenar de mayor a menor
+    df_agrupado = df_agrupado.sort_values('Demanda_No_Atendida_GWh', ascending=False)
+    df_agrupado['Demanda_No_Atendida_GWh'] = df_agrupado['Demanda_No_Atendida_GWh'].apply(lambda x: f"{x:.4f}")
+
     # Renombrar columnas para display
-    df_tabla = df_tabla[['Fecha', 'Area', 'Demanda_No_Atendida_GWh']]
-    df_tabla.columns = ['Fecha', 'Área', 'Demanda No Atendida (GWh)']
-    
+    df_tabla = df_agrupado[['Area', 'Demanda_No_Atendida_GWh']]
+    df_tabla.columns = ['Área', 'Demanda No Atendida (GWh)']
+
+    # Nota sobre "AREA NO DEFINIDA"
+    nota_area_no_definida = None
+    if 'AREA NO DEFINIDA' in df_tabla['Área'].values:
+        nota_area_no_definida = html.Div([
+            html.Span("Nota: 'AREA NO DEFINIDA' corresponde a registros donde XM no asignó un área específica en la fuente de datos.", style={'color': COLORS.get('warning', '#ffc107'), 'fontSize': '1rem'})
+        ], className="mt-2")
+
     # Calcular total
     total_gwh = df_dna['Demanda_No_Atendida_GWh'].sum()
-    
+
     tabla = dash_table.DataTable(
         id='tabla-demanda-no-atendida',
         columns=[{"name": col, "id": col} for col in df_tabla.columns],
@@ -347,15 +514,18 @@ def crear_tabla_demanda_no_atendida(df_dna, page_current=0, page_size=10):
             }
         ]
     )
-    
+
     # Fila de total
     total_row = html.Div([
         html.Strong("Total Demanda No Atendida: "),
         html.Span(f"{total_gwh:.4f} GWh", 
                  style={'color': COLORS.get('danger', '#dc3545'), 'fontSize': '1.1rem'})
     ], className="mt-3 text-end", style={'padding': '10px'})
-    
-    return html.Div([tabla, total_row])
+
+    if nota_area_no_definida:
+        return html.Div([tabla, total_row, nota_area_no_definida])
+    else:
+        return html.Div([tabla, total_row])
 
 # ==================== LAYOUT ====================
 
@@ -365,22 +535,31 @@ def layout(**kwargs):
     # Obtener datos iniciales
     try:
         fecha_fin = date.today() - timedelta(days=1)
-        fecha_inicio = fecha_fin - timedelta(days=30)
+        fecha_inicio = fecha_fin - timedelta(days=365)  # ✅ Último año por defecto (igual que generación)
         
-        # Obtener listado de agentes
+        # Obtener listado de agentes (ya ordenados por cantidad de datos)
         agentes_df = obtener_listado_agentes()
         
-        # Opciones para el dropdown
+        # Opciones para el dropdown con advertencias
         if not agentes_df.empty and 'Values_Code' in agentes_df.columns and 'Values_Name' in agentes_df.columns:
-            opciones_agentes = [
-                {'label': f"{row['Values_Code']} - {row['Values_Name']}", 
-                 'value': row['Values_Code']}
-                for _, row in agentes_df.iterrows()
-            ]
-            # Agregar opción "Todos"
-            opciones_agentes.insert(0, {'label': 'TODOS LOS AGENTES', 'value': 'TODOS'})
+            opciones_agentes = []
+            for _, row in agentes_df.iterrows():
+                # Construir etiqueta con advertencia si existe
+                label = f"{row['Values_Code']} - {row['Values_Name']}"
+                if 'advertencia' in row and row['advertencia']:
+                    label += f" {row['advertencia']}"
+                
+                opciones_agentes.append({
+                    'label': label,
+                    'value': row['Values_Code']
+                })
+            
+            # Agregar opción "Todos" al inicio
+            opciones_agentes.insert(0, {'label': '📊 TODOS LOS AGENTES', 'value': 'TODOS'})
+            
+            logger.info(f"✅ Dropdown creado con {len(opciones_agentes)-1} agentes (ordenados por datos)")
         else:
-            opciones_agentes = [{'label': 'No hay agentes disponibles', 'value': None}]
+            opciones_agentes = [{'label': '⚠️ No hay agentes disponibles', 'value': None}]
         
         # Obtener datos de demanda para todos los agentes inicialmente
         df_demanda_come = obtener_demanda_comercial(fecha_inicio, fecha_fin)
@@ -400,36 +579,76 @@ def layout(**kwargs):
         fig_lineas = get_plotly_modules()[1].Figure()
         tabla_dna = html.Div("Error cargando datos")
     
+    # FICHAS: Demanda No Atendida Nacional y Participaciones
+    total_dna_nacional = df_dna['Demanda_No_Atendida_GWh'].sum() if not df_dna.empty else 0.0
+
+    # Demanda Real total
+    demanda_real_total = df_demanda_real['Demanda_GWh'].sum() if not df_demanda_real.empty else 0.0
+    # Demanda Real Regulado
+    df_reg, _ = obtener_datos_inteligente('DemaRealReg', 'Sistema', fecha_inicio, fecha_fin)
+    demanda_regulada = df_reg['Value'].sum() if df_reg is not None and not df_reg.empty else 0.0
+    # Demanda Real No Regulado
+    df_noreg, _ = obtener_datos_inteligente('DemaRealNoReg', 'Sistema', fecha_inicio, fecha_fin)
+    demanda_no_regulada = df_noreg['Value'].sum() if df_noreg is not None and not df_noreg.empty else 0.0
+
+    # Porcentajes
+    porcentaje_regulado = (demanda_regulada / demanda_real_total * 100) if demanda_real_total > 0 else 0.0
+    porcentaje_no_regulado = (demanda_no_regulada / demanda_real_total * 100) if demanda_real_total > 0 else 0.0
+
+    ficha_dna_nacional = dbc.Card([
+        dbc.CardBody([
+            html.H4("Demanda No Atendida Nacional", className="mb-2", style={"color": COLORS.get('text_primary', '#3D3D3D'), "fontWeight": "600"}),
+            html.H2(f"{total_dna_nacional:.2f} GWh", id='valor-dna-nacional', className="mb-2", style={"color": "#8B5CF6", "fontWeight": "bold"}),
+            html.P([
+                html.I(className="fas fa-calendar-alt me-2", style={"color": "#8B5CF6"}),
+                html.Span(f"Rango de fechas: {fecha_inicio.strftime('%Y-%m-%d')} a {fecha_fin.strftime('%Y-%m-%d')}", id='fecha-dna-nacional')
+            ], style={"fontSize": "0.9rem", "color": COLORS.get('text_secondary', '#60350E')})
+        ])
+    ], className="mb-4 shadow-sm", style={"borderLeft": "4px solid #8B5CF6"})
+
+    ficha_regulado = dbc.Card([
+        dbc.CardBody([
+            html.H4("Participación Mercado Regulado", className="mb-2", style={"color": COLORS.get('text_primary', '#3D3D3D'), "fontWeight": "600"}),
+            html.H2(f"{porcentaje_regulado:.2f}%", id='valor-regulado', className="mb-2", style={"color": "#10B981", "fontWeight": "bold"}),
+            html.P([
+                html.I(className="fas fa-calendar-alt me-2", style={"color": "#10B981"}),
+                html.Span(f"Rango de fechas: {fecha_inicio.strftime('%Y-%m-%d')} a {fecha_fin.strftime('%Y-%m-%d')}", id='fecha-regulado')
+            ], style={"fontSize": "0.9rem", "color": COLORS.get('text_secondary', '#60350E')})
+        ])
+    ], className="mb-4 shadow-sm", style={"borderLeft": "4px solid #10B981"})
+
+    ficha_no_regulado = dbc.Card([
+        dbc.CardBody([
+            html.H4("Participación Mercado No Regulado", className="mb-2", style={"color": COLORS.get('text_primary', '#3D3D3D'), "fontWeight": "600"}),
+            html.H2(f"{porcentaje_no_regulado:.2f}%", id='valor-no-regulado', className="mb-2", style={"color": "#3B82F6", "fontWeight": "bold"}),
+            html.P([
+                html.I(className="fas fa-calendar-alt me-2", style={"color": "#3B82F6"}),
+                html.Span(f"Rango de fechas: {fecha_inicio.strftime('%Y-%m-%d')} a {fecha_fin.strftime('%Y-%m-%d')}", id='fecha-no-regulado')
+            ], style={"fontSize": "0.9rem", "color": COLORS.get('text_secondary', '#60350E')})
+        ])
+    ], className="mb-4 shadow-sm", style={"borderLeft": "4px solid #3B82F6"})
+
     return html.Div([
-        # Sidebar desplegable
         crear_sidebar_universal(),
-        
-        # Header específico
         crear_header(
             titulo_pagina="Demanda por Agente",
             descripcion_pagina="Análisis de demanda comercial y real por agente del sistema",
             icono_pagina="fas fa-bolt",
             color_tema=COLORS.get('distribucion', '#3F51B5')
         ),
-        
-        # Container principal
         dbc.Container([
-            # Botón de regreso
             crear_boton_regresar(),
-            
-            # Título de la sección
             dbc.Row([
                 dbc.Col([
                     html.Div([
                         html.I(className="fas fa-bolt", 
-                              style={"fontSize": "3rem", "color": "#3F51B5", "marginRight": "1rem"}),
+                              style={"fontSize": "3rem", "color": "#8B5CF6", "marginRight": "1rem"}),
                         html.H2("DEMANDA POR AGENTE", 
                                style={"color": COLORS['text_primary'], "fontWeight": "700", 
                                       "display": "inline-block"})
                     ], className="text-center mb-4")
                 ])
             ]),
-            
             # Controles de filtro
             dbc.Row([
                 dbc.Col([
@@ -481,6 +700,13 @@ def layout(**kwargs):
                 ])
             ]),
             
+            # Fichas en la misma fila (después de los filtros)
+            dbc.Row([
+                dbc.Col([ficha_dna_nacional], md=4),
+                dbc.Col([ficha_regulado], md=4),
+                dbc.Col([ficha_no_regulado], md=4),
+            ]),
+            # ...existing code...
             # Gráfica de líneas
             dbc.Row([
                 dbc.Col([
@@ -507,7 +733,7 @@ def layout(**kwargs):
                     ], className="mb-4 shadow-sm")
                 ])
             ]),
-            
+            # ...existing code...
             # Tabla de Demanda No Atendida
             dbc.Row([
                 dbc.Col([
@@ -533,12 +759,9 @@ def layout(**kwargs):
                     ], className="mb-4 shadow-sm")
                 ])
             ]),
-            
-            # Store para guardar datos
+            # ...existing code...
             dcc.Store(id='store-datos-distribucion'),
             dcc.Store(id='store-agentes-distribucion', data=agentes_df.to_json(date_format='iso', orient='split') if not agentes_df.empty else None),
-            
-            # Modal para mostrar detalle al hacer click en la gráfica
             dbc.Modal([
                 dbc.ModalHeader(dbc.ModalTitle(id="modal-title-demanda")),
                 dbc.ModalBody([
@@ -549,7 +772,6 @@ def layout(**kwargs):
                     dbc.Button("Cerrar", id="close-modal-demanda", className="ms-auto", n_clicks=0)
                 )
             ], id="modal-detalle-demanda", is_open=False, size="xl")
-            
         ], fluid=True, className="py-4")
     ])
 
@@ -558,17 +780,27 @@ def layout(**kwargs):
 @callback(
     [Output('grafica-lineas-demanda', 'figure'),
      Output('contenedor-tabla-dna', 'children'),
-     Output('store-datos-distribucion', 'data')],
+     Output('store-datos-distribucion', 'data'),
+     Output('valor-dna-nacional', 'children'),
+     Output('fecha-dna-nacional', 'children'),
+     Output('valor-regulado', 'children'),
+     Output('fecha-regulado', 'children'),
+     Output('valor-no-regulado', 'children'),
+     Output('fecha-no-regulado', 'children')],
     [Input('btn-actualizar-distribucion', 'n_clicks')],
     [State('selector-agente-distribucion', 'value'),
      State('selector-fechas-distribucion', 'start_date'),
      State('selector-fechas-distribucion', 'end_date'),
-     State('store-agentes-distribucion', 'data')]
+     State('store-agentes-distribucion', 'data')],
+    prevent_initial_call=True
 )
 def actualizar_datos_distribucion(n_clicks, codigo_agente, fecha_inicio_str, fecha_fin_str, agentes_json):
     """Callback para actualizar la gráfica y tabla según los filtros seleccionados"""
     
     px, go = get_plotly_modules()
+    
+    # Debug: Log cuando se ejecuta el callback
+    logger.info(f"🔄 Callback actualizar_datos_distribucion ejecutado - n_clicks: {n_clicks}, agente: {codigo_agente}, fechas: {fecha_inicio_str} a {fecha_fin_str}")
     
     try:
         # Convertir fechas
@@ -582,7 +814,17 @@ def actualizar_datos_distribucion(n_clicks, codigo_agente, fecha_inicio_str, fec
                 xref="paper", yref="paper", x=0.5, y=0.5,
                 showarrow=False, font=dict(size=16, color="red")
             )
-            return fig_error, html.Div("Rango de fechas demasiado amplio"), None
+            return (
+                fig_error, 
+                html.Div("Rango de fechas demasiado amplio"), 
+                None,
+                "Error",
+                "Rango demasiado amplio",
+                "Error",
+                "Rango demasiado amplio",
+                "Error",
+                "Rango demasiado amplio"
+            )
         
         # Determinar códigos de agentes a consultar
         codigos_agentes = None
@@ -616,7 +858,61 @@ def actualizar_datos_distribucion(n_clicks, codigo_agente, fecha_inicio_str, fec
             'dna': df_dna.to_json(date_format='iso', orient='split') if not df_dna.empty else None
         }
         
-        return fig_lineas, tabla_dna, store_data
+        # Calcular valores para las fichas
+        total_dna_nacional = df_dna['Demanda_No_Atendida_GWh'].sum() if not df_dna.empty else 0.0
+        demanda_real_total = df_demanda_real['Demanda_GWh'].sum() if not df_demanda_real.empty else 0.0
+        
+        # Obtener datos de demanda regulada y no regulada
+        # IMPORTANTE: DemaRealReg solo existe a nivel Sistema, no por Agente
+        # DemaRealNoReg existe tanto a nivel Sistema como por Agente
+        if codigo_agente and codigo_agente != 'TODOS':
+            # Para un agente específico:
+            # - Demanda regulada: Calcular como (DemaReal - DemaRealNoReg) del agente
+            # - Demanda no regulada: Consultar directamente DemaRealNoReg del agente
+            
+            # Obtener demanda no regulada del agente (existe por agente)
+            df_noreg, _ = obtener_datos_inteligente('DemaRealNoReg', 'Agente', fecha_inicio, fecha_fin)
+            if df_noreg is not None and not df_noreg.empty:
+                code_column = 'Values_code' if 'Values_code' in df_noreg.columns else 'Values_Code'
+                logger.info(f"🔍 Filtrando DemaRealNoReg por agente {codigo_agente}, columna: {code_column}")
+                logger.info(f"📊 Registros antes del filtro: {len(df_noreg)}")
+                df_noreg = df_noreg[df_noreg[code_column] == codigo_agente]
+                logger.info(f"✅ Registros después del filtro: {len(df_noreg)}")
+                demanda_no_regulada = df_noreg['Value'].sum() if not df_noreg.empty else 0.0
+            else:
+                demanda_no_regulada = 0.0
+            
+            # Calcular demanda regulada como: DemaReal - DemaRealNoReg
+            # (DemaReal del agente ya está calculada en demanda_real_total)
+            demanda_regulada = max(0.0, demanda_real_total - demanda_no_regulada)
+            
+            logger.info(f"📊 Agente {codigo_agente}: Real={demanda_real_total:.2f} GWh, NoReg={demanda_no_regulada:.2f} GWh, Reg={demanda_regulada:.2f} GWh")
+        else:
+            # Todos los agentes - consultar a nivel sistema
+            df_reg, _ = obtener_datos_inteligente('DemaRealReg', 'Sistema', fecha_inicio, fecha_fin)
+            demanda_regulada = df_reg['Value'].sum() if df_reg is not None and not df_reg.empty else 0.0  # Ya en GWh desde SQLite
+            
+            df_noreg, _ = obtener_datos_inteligente('DemaRealNoReg', 'Sistema', fecha_inicio, fecha_fin)
+            demanda_no_regulada = df_noreg['Value'].sum() if df_noreg is not None and not df_noreg.empty else 0.0  # Ya en GWh desde SQLite
+        
+        # Porcentajes
+        porcentaje_regulado = (demanda_regulada / demanda_real_total * 100) if demanda_real_total > 0 else 0.0
+        porcentaje_no_regulado = (demanda_no_regulada / demanda_real_total * 100) if demanda_real_total > 0 else 0.0
+        
+        # Textos de fechas
+        texto_fecha = f"Rango de fechas: {fecha_inicio.strftime('%Y-%m-%d')} a {fecha_fin.strftime('%Y-%m-%d')}"
+        
+        return (
+            fig_lineas, 
+            tabla_dna, 
+            store_data,
+            f"{total_dna_nacional:.2f} GWh",
+            texto_fecha,
+            f"{porcentaje_regulado:.2f}%",
+            texto_fecha,
+            f"{porcentaje_no_regulado:.2f}%",
+            texto_fecha
+        )
         
     except Exception as e:
         print(f"Error en actualizar_datos_distribucion: {e}")
@@ -628,7 +924,17 @@ def actualizar_datos_distribucion(n_clicks, codigo_agente, fecha_inicio_str, fec
             showarrow=False, font=dict(size=14, color="red")
         )
         
-        return fig_error, html.Div(f"Error: {str(e)[:200]}"), None
+        return (
+            fig_error, 
+            html.Div(f"Error: {str(e)[:200]}"), 
+            None,
+            "Error",
+            "Error en fechas",
+            "Error",
+            "Error en fechas",
+            "Error",
+            "Error en fechas"
+        )
 
 @callback(
     [Output('modal-detalle-demanda', 'is_open'),
@@ -642,19 +948,21 @@ def actualizar_datos_distribucion(n_clicks, codigo_agente, fecha_inicio_str, fec
      State('modal-detalle-demanda', 'is_open')],
     prevent_initial_call=True
 )
-def mostrar_detalle_por_agente(clickData, n_clicks_close, datos_store, agentes_json, is_open):
+def mostrar_detalle_horario(clickData, n_clicks_close, datos_store, agentes_json, is_open):
     """
-    Callback para mostrar tabla detallada por agente al hacer click en un punto de la gráfica
+    Callback para mostrar tabla detallada HORARIA al hacer click en un punto de la gráfica
     
-    La tabla muestra:
-    - Agente (código y nombre)
+    La tabla muestra 24 filas (una por hora) con:
+    - Hora (01 a 24)
     - Demanda Comercial (GWh)
     - Demanda Real (GWh)
-    - Participación (%)
-    - Diferencia (Real - Comercial) en GWh
+    - Diferencia (%) = ((Real - Comercial) / Comercial * 100)
+    - Participación Horaria (%) = (Demanda_hora / Total_día * 100)
     """
     
     import dash
+    from utils import db_manager
+    
     ctx = dash.callback_context
     
     if not ctx.triggered:
@@ -672,118 +980,116 @@ def mostrar_detalle_por_agente(clickData, n_clicks_close, datos_store, agentes_j
             # Obtener datos del punto clickeado
             point_data = clickData['points'][0]
             fecha_seleccionada = point_data['x']
-            curve_number = point_data.get('curveNumber', 0)
             
-            print(f"🎯 Click en gráfica - Fecha: {fecha_seleccionada}, Curva: {curve_number}")
-            
-            # Verificar que hay datos en el store
-            if not datos_store:
-                return False, html.Div("No hay datos disponibles"), "Sin datos", ""
-            
-            # Cargar datos del store
-            df_demanda_come = pd.read_json(StringIO(datos_store['demanda_come']), orient='split') if datos_store.get('demanda_come') else pd.DataFrame()
-            df_demanda_real = pd.read_json(StringIO(datos_store['demanda_real']), orient='split') if datos_store.get('demanda_real') else pd.DataFrame()
-            
-            if df_demanda_come.empty and df_demanda_real.empty:
-                return False, html.Div("No hay datos para esta fecha"), "Sin datos", ""
-            
-            # Convertir fecha seleccionada a datetime
+            # Convertir fecha a formato YYYY-MM-DD
             fecha_dt = pd.to_datetime(fecha_seleccionada)
+            fecha_str = fecha_dt.strftime('%Y-%m-%d')
             
-            # Filtrar datos por fecha
-            df_come_fecha = df_demanda_come[pd.to_datetime(df_demanda_come['Fecha']) == fecha_dt].copy() if not df_demanda_come.empty else pd.DataFrame()
-            df_real_fecha = df_demanda_real[pd.to_datetime(df_demanda_real['Fecha']) == fecha_dt].copy() if not df_demanda_real.empty else pd.DataFrame()
+            logger.info(f"🎯 Click en gráfica - Fecha: {fecha_str}")
             
-            print(f"📊 Datos filtrados - DemaCome: {len(df_come_fecha)}, DemaReal: {len(df_real_fecha)}")
+            # =========================================================================
+            # OBTENER DATOS HORARIOS AGREGADOS DE SQLite (suma de todos los agentes)
+            # =========================================================================
+            df_horas_come = db_manager.get_hourly_data_aggregated('DemaCome', 'Agente', fecha_str)
+            df_horas_real = db_manager.get_hourly_data_aggregated('DemaReal', 'Agente', fecha_str)
             
-            if df_come_fecha.empty and df_real_fecha.empty:
-                return False, html.Div("No hay datos para esta fecha"), "Sin datos", ""
+            if df_horas_come.empty and df_horas_real.empty:
+                return False, html.Div("No hay datos horarios disponibles para esta fecha"), "Sin datos", ""
             
-            # Cargar listado de agentes para obtener nombres
-            agentes_df = pd.read_json(StringIO(agentes_json), orient='split') if agentes_json else pd.DataFrame()
+            # =========================================================================
+            # CREAR DATAFRAME CON 24 HORAS
+            # =========================================================================
+            df_horas = pd.DataFrame({'hora': range(1, 25)})
             
-            # Combinar datos de demanda comercial y real
-            if not df_come_fecha.empty:
-                df_combined = df_come_fecha.groupby('Codigo_Agente', as_index=False)['Demanda_GWh'].sum()
-                df_combined = df_combined.rename(columns={'Demanda_GWh': 'Demanda_Comercial_GWh'})
+            # Merge con datos de demanda comercial
+            if not df_horas_come.empty:
+                df_horas = df_horas.merge(
+                    df_horas_come[['hora', 'valor_mwh']].rename(columns={'valor_mwh': 'DemaCome_MWh'}),
+                    on='hora',
+                    how='left'
+                )
             else:
-                df_combined = pd.DataFrame(columns=['Codigo_Agente', 'Demanda_Comercial_GWh'])
+                df_horas['DemaCome_MWh'] = 0.0
             
-            if not df_real_fecha.empty:
-                df_real_agg = df_real_fecha.groupby('Codigo_Agente', as_index=False)['Demanda_GWh'].sum()
-                df_real_agg = df_real_agg.rename(columns={'Demanda_GWh': 'Demanda_Real_GWh'})
-                
-                if df_combined.empty:
-                    df_combined = df_real_agg
-                else:
-                    df_combined = df_combined.merge(df_real_agg, on='Codigo_Agente', how='outer')
+            # Merge con datos de demanda real
+            if not df_horas_real.empty:
+                df_horas = df_horas.merge(
+                    df_horas_real[['hora', 'valor_mwh']].rename(columns={'valor_mwh': 'DemaReal_MWh'}),
+                    on='hora',
+                    how='left'
+                )
+            else:
+                df_horas['DemaReal_MWh'] = 0.0
             
             # Rellenar NaN con 0
-            df_combined['Demanda_Comercial_GWh'] = df_combined.get('Demanda_Comercial_GWh', 0).fillna(0)
-            df_combined['Demanda_Real_GWh'] = df_combined.get('Demanda_Real_GWh', 0).fillna(0)
+            df_horas['DemaCome_MWh'] = df_horas['DemaCome_MWh'].fillna(0)
+            df_horas['DemaReal_MWh'] = df_horas['DemaReal_MWh'].fillna(0)
             
-            # Calcular diferencia
-            df_combined['Diferencia_GWh'] = df_combined['Demanda_Real_GWh'] - df_combined['Demanda_Comercial_GWh']
+            # Convertir MWh → GWh
+            df_horas['DemaCome_GWh'] = df_horas['DemaCome_MWh'] / 1000
+            df_horas['DemaReal_GWh'] = df_horas['DemaReal_MWh'] / 1000
             
-            # Calcular participación basada en demanda comercial (o real si no hay comercial)
-            total_comercial = df_combined['Demanda_Comercial_GWh'].sum()
-            total_real = df_combined['Demanda_Real_GWh'].sum()
+            # =========================================================================
+            # CALCULAR DIFERENCIA EN PORCENTAJE
+            # =========================================================================
+            def calcular_diferencia_porcentaje(row):
+                if row['DemaCome_GWh'] > 0:
+                    return ((row['DemaReal_GWh'] - row['DemaCome_GWh']) / row['DemaCome_GWh'] * 100)
+                elif row['DemaReal_GWh'] > 0:
+                    return 100.0  # Si no hay comercial pero sí real, 100% de diferencia
+                else:
+                    return 0.0
             
-            if total_comercial > 0:
-                df_combined['Participacion_%'] = (df_combined['Demanda_Comercial_GWh'] / total_comercial * 100).round(2)
-            elif total_real > 0:
-                df_combined['Participacion_%'] = (df_combined['Demanda_Real_GWh'] / total_real * 100).round(2)
+            df_horas['Diferencia_%'] = df_horas.apply(calcular_diferencia_porcentaje, axis=1)
+            
+            # =========================================================================
+            # CALCULAR PARTICIPACIÓN HORARIA (% del total del día)
+            # =========================================================================
+            total_dia_come = df_horas['DemaCome_GWh'].sum()
+            total_dia_real = df_horas['DemaReal_GWh'].sum()
+            
+            if total_dia_come > 0:
+                df_horas['Participacion_%'] = (df_horas['DemaCome_GWh'] / total_dia_come * 100)
+            elif total_dia_real > 0:
+                df_horas['Participacion_%'] = (df_horas['DemaReal_GWh'] / total_dia_real * 100)
             else:
-                df_combined['Participacion_%'] = 0
+                df_horas['Participacion_%'] = 0.0
             
-            # Agregar nombres de agentes
-            if not agentes_df.empty:
-                agentes_nombres = agentes_df[['Values_Code', 'Values_Name']].drop_duplicates()
-                agentes_nombres = agentes_nombres.rename(columns={'Values_Code': 'Codigo_Agente', 'Values_Name': 'Nombre_Agente'})
-                df_combined = df_combined.merge(agentes_nombres, on='Codigo_Agente', how='left')
-                df_combined['Agente'] = df_combined['Codigo_Agente'] + ' - ' + df_combined['Nombre_Agente'].fillna('Desconocido')
-            else:
-                df_combined['Agente'] = df_combined['Codigo_Agente']
+            # =========================================================================
+            # FORMATEAR TABLA PARA DISPLAY
+            # =========================================================================
+            df_tabla = df_horas.copy()
             
-            # Ordenar por participación descendente
-            df_combined = df_combined.sort_values('Participacion_%', ascending=False)
-            
-            # Formatear para la tabla
-            df_tabla = df_combined[[
-                'Agente', 
-                'Demanda_Comercial_GWh', 
-                'Demanda_Real_GWh', 
-                'Participacion_%', 
-                'Diferencia_GWh'
-            ]].copy()
+            # Formatear columna de hora
+            df_tabla['Hora'] = df_tabla['hora'].apply(lambda x: f"Hora {x:02d}")
             
             # Formatear números
-            df_tabla['Demanda_Comercial_GWh'] = df_tabla['Demanda_Comercial_GWh'].apply(lambda x: f"{x:.4f}")
-            df_tabla['Demanda_Real_GWh'] = df_tabla['Demanda_Real_GWh'].apply(lambda x: f"{x:.4f}")
-            df_tabla['Diferencia_GWh'] = df_tabla['Diferencia_GWh'].apply(lambda x: f"{x:+.4f}")
-            df_tabla['Participacion_%'] = df_tabla['Participacion_%'].apply(lambda x: f"{x:.2f}%")
+            df_tabla['Demanda Comercial (GWh)'] = df_tabla['DemaCome_GWh'].apply(lambda x: f"{x:.4f}")
+            df_tabla['Demanda Real (GWh)'] = df_tabla['DemaReal_GWh'].apply(lambda x: f"{x:.4f}")
+            df_tabla['Diferencia (%)'] = df_tabla['Diferencia_%'].apply(lambda x: f"{x:+.2f}%")
+            df_tabla['Participación Horaria (%)'] = df_tabla['Participacion_%'].apply(lambda x: f"{x:.2f}%")
             
-            # Renombrar columnas para display
-            df_tabla.columns = [
-                'Agente',
+            # Seleccionar columnas finales
+            df_tabla = df_tabla[[
+                'Hora',
                 'Demanda Comercial (GWh)',
                 'Demanda Real (GWh)',
-                'Participación (%)',
-                'Diferencia (GWh)'
-            ]
+                'Diferencia (%)',
+                'Participación Horaria (%)'
+            ]]
             
-            # Agregar fila de totales
+            # Agregar fila de TOTAL
             total_row = {
-                'Agente': 'TOTAL',
-                'Demanda Comercial (GWh)': f"{total_comercial:.4f}",
-                'Demanda Real (GWh)': f"{total_real:.4f}",
-                'Participación (%)': '100.00%',
-                'Diferencia (GWh)': f"{total_real - total_comercial:+.4f}"
+                'Hora': 'TOTAL',
+                'Demanda Comercial (GWh)': f"{total_dia_come:.4f}",
+                'Demanda Real (GWh)': f"{total_dia_real:.4f}",
+                'Diferencia (%)': f"{((total_dia_real - total_dia_come) / total_dia_come * 100) if total_dia_come > 0 else 0:+.2f}%",
+                'Participación Horaria (%)': '100.00%'
             }
             
             data_with_total = df_tabla.to_dict('records') + [total_row]
             
-            # Crear tabla
+            # Crear tabla horaria
             tabla = dash_table.DataTable(
                 data=data_with_total,
                 columns=[{"name": col, "id": col} for col in df_tabla.columns],
@@ -810,27 +1116,55 @@ def mostrar_detalle_por_agente(clickData, n_clicks_close, datos_store, agentes_j
                         'backgroundColor': 'white'
                     },
                     {
-                        'if': {'filter_query': '{Agente} = "TOTAL"'},
+                        # Destacar fila TOTAL
+                        'if': {'filter_query': '{Hora} = "TOTAL"'},
                         'backgroundColor': COLORS.get('primary', '#0d6efd'),
                         'color': 'white',
                         'fontWeight': 'bold'
                     },
                     {
+                        # Diferencia positiva en verde
                         'if': {
-                            'filter_query': '{Diferencia (GWh)} contains "+"',
-                            'column_id': 'Diferencia (GWh)'
+                            'filter_query': '{Diferencia (%)} contains "+"',
+                            'column_id': 'Diferencia (%)'
                         },
-                        'color': COLORS.get('success', '#28a745')
+                        'color': COLORS.get('success', '#28a745'),
+                        'fontWeight': 'bold'
                     },
                     {
+                        # Diferencia negativa en rojo
                         'if': {
-                            'filter_query': '{Diferencia (GWh)} contains "-"',
-                            'column_id': 'Diferencia (GWh)'
+                            'filter_query': '{Diferencia (%)} contains "-"',
+                            'column_id': 'Diferencia (%)'
                         },
-                        'color': COLORS.get('danger', '#dc3545')
+                        'color': COLORS.get('danger', '#dc3545'),
+                        'fontWeight': 'bold'
+                    },
+                    {
+                        # Alinear columnas numéricas a la derecha
+                        'if': {'column_id': 'Demanda Comercial (GWh)'},
+                        'textAlign': 'right'
+                    },
+                    {
+                        'if': {'column_id': 'Demanda Real (GWh)'},
+                        'textAlign': 'right'
+                    },
+                    {
+                        'if': {'column_id': 'Diferencia (%)'},
+                        'textAlign': 'right'
+                    },
+                    {
+                        'if': {'column_id': 'Participación Horaria (%)'},
+                        'textAlign': 'right'
+                    },
+                    {
+                        # Centrar columna Hora
+                        'if': {'column_id': 'Hora'},
+                        'textAlign': 'center',
+                        'fontWeight': '500'
                     }
                 ],
-                page_size=15,
+                page_size=25,  # Mostrar todas las 24 horas + TOTAL sin scroll
                 page_action='native',
                 sort_action='native',
                 filter_action='native',
@@ -840,10 +1174,9 @@ def mostrar_detalle_por_agente(clickData, n_clicks_close, datos_store, agentes_j
             
             # Título y descripción
             fecha_formateada = pd.to_datetime(fecha_seleccionada).strftime('%d/%m/%Y')
-            tipo_demanda = "Demanda Comercial" if curve_number == 0 else "Demanda Real"
             
-            titulo = f"📊 Detalle por Agente - {fecha_formateada}"
-            descripcion = f"Detalle de demanda por agente para el día {fecha_formateada}. Se muestran {len(df_tabla)} agentes con sus respectivas demandas comercial y real, participación porcentual y la diferencia entre ambas."
+            titulo = f"🕐 Detalle Horario - {fecha_formateada}"
+            descripcion = f"Distribución horaria de demanda para el día {fecha_formateada}. Se muestran 24 horas con demanda comercial y real, diferencia porcentual entre ambas, y participación de cada hora en el total diario."
             
             return True, tabla, titulo, descripcion
             

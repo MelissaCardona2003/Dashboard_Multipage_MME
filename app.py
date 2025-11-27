@@ -33,27 +33,18 @@ logger.info("🚀 INICIANDO PORTAL ENERGÉTICO MME")
 logger.info(f"Ambiente: {os.getenv('DASH_ENV', 'development')}")
 logger.info("=" * 70)
 
-# Limpiar cache corrupto al inicio (ANTES de crear la app)
-logger.info("🧹 Verificando integridad del cache...")
-try:
-    from utils.cache_manager import cleanup_corrupted_cache
-    cleanup_corrupted_cache()
-    logger.info("✅ Cache verificado correctamente")
-except Exception as e:
-    logger.warning(f"Error al limpiar cache: {e}")
-
-# ⚡ OPTIMIZACIÓN: Pre-cargar datos comunes para acelerar primera carga
-logger.info("⚡ Pre-cargando datos comunes...")
+# ⚡ OPTIMIZACIÓN: Pre-cargar conexión a API XM
+logger.info("⚡ Inicializando conexión a API XM...")
 try:
     from utils._xm import get_objetoAPI
     
     objetoAPI = get_objetoAPI()
     if objetoAPI:
-        logger.info("📊 API XM disponible - sistema de cache listo")
+        logger.info("✅ API XM disponible")
     else:
-        logger.warning("⚠️ API XM no disponible - usando solo cache histórico")
+        logger.warning("⚠️ API XM no disponible")
 except Exception as e:
-    logger.warning(f"Error en pre-carga: {e}")
+    logger.warning(f"Error en inicialización API XM: {e}")
 
 # Crear la aplicación Dash con soporte multi-página
 app = Dash(
@@ -95,15 +86,92 @@ def health_check():
 # AHORA importar y registrar las páginas manualmente
 import pages.index_simple_working
 import pages.generacion_fuentes_unificado
+import pages.comercializacion
 
 # Importar page_container DESPUÉS de registrar páginas
-from dash import page_container
+from dash import page_container, Input, Output, State, callback
 
 # Layout principal con page_container
 app.layout = html.Div([
     dcc.Location(id="url", refresh=False),
     page_container
 ])
+
+# Callback para el sidebar universal
+@app.callback(
+    [Output("sidebar-content", "style"),
+     Output("sidebar-overlay", "style"),
+     Output("sidebar-toggle", "style")],
+    [Input("sidebar-toggle", "n_clicks"),
+     Input("sidebar-close", "n_clicks"),
+     Input("sidebar-overlay", "n_clicks")],
+    [State("sidebar-content", "style"),
+     State("sidebar-overlay", "style")],
+    prevent_initial_call=True
+)
+def toggle_sidebar(toggle_clicks, close_clicks, overlay_clicks, sidebar_style, overlay_style):
+    """Controlar la apertura y cierre del sidebar"""
+    from dash import callback_context as ctx
+    from utils.config import COLORS
+    
+    if not ctx.triggered:
+        return sidebar_style, overlay_style, {'position': 'fixed', 'top': '20px', 'left': '20px', 'zIndex': '1050', 'borderRadius': '8px', 'padding': '10px 12px'}
+    
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
+    
+    # Estilos base
+    sidebar_hidden = {
+        'position': 'fixed',
+        'top': '0',
+        'left': '-300px',
+        'width': '300px',
+        'height': '100vh',
+        'background': COLORS['bg_card'],
+        'borderRight': f'1px solid {COLORS["border"]}',
+        'boxShadow': '2px 0 10px rgba(0,0,0,0.1)',
+        'zIndex': '1040',
+        'transition': 'left 0.3s ease-in-out'
+    }
+    
+    sidebar_visible = sidebar_hidden.copy()
+    sidebar_visible['left'] = '0px'
+    
+    overlay_hidden = {
+        'position': 'fixed',
+        'top': '0',
+        'left': '0',
+        'width': '100vw',
+        'height': '100vh',
+        'background': 'rgba(0,0,0,0.3)',
+        'zIndex': '1030',
+        'display': 'none'
+    }
+    
+    overlay_visible = overlay_hidden.copy()
+    overlay_visible['display'] = 'block'
+    
+    # Estilos del botón toggle
+    toggle_visible = {
+        'position': 'fixed',
+        'top': '20px',
+        'left': '20px',
+        'zIndex': '1050',
+        'borderRadius': '8px',
+        'padding': '10px 12px',
+        'display': 'block'
+    }
+    
+    toggle_hidden = toggle_visible.copy()
+    toggle_hidden['display'] = 'none'
+    
+    if button_id == "sidebar-toggle":
+        # Abrir sidebar y ocultar botón
+        return sidebar_visible, overlay_visible, toggle_hidden
+    elif button_id in ["sidebar-close", "sidebar-overlay"]:
+        # Cerrar sidebar y mostrar botón
+        return sidebar_hidden, overlay_hidden, toggle_visible
+    
+    return sidebar_style, overlay_style, toggle_visible
 
 if __name__ == "__main__":
     import os

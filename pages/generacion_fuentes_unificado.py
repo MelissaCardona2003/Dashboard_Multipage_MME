@@ -35,7 +35,7 @@ from utils.components import crear_header, crear_navbar, crear_sidebar_universal
 from utils.config import COLORS
 from utils.utils_xm import fetch_gene_recurso_chunked
 from utils._xm import get_objetoAPI, fetch_metric_data, obtener_datos_desde_sqlite, obtener_datos_inteligente
-from utils.cache_manager import get_cache_key, get_from_cache, save_to_cache
+# CACHE ELIMINADO - Ahora usamos solo ETL-SQLite
 
 warnings.filterwarnings("ignore")
 
@@ -149,12 +149,7 @@ def obtener_listado_recursos(tipo_fuente='EOLICA'):
 
 def obtener_listado_recursos_desde_api(tipo_fuente='EOLICA'):
     """Fallback: obtener listado desde API XM (LENTO - solo si SQLite falla)"""
-    cache_key = get_cache_key('listado_recursos', tipo_fuente)
-    cached_data = get_from_cache(cache_key, allow_expired=False)
-    
-    if cached_data is not None:
-        logger.info(f"✅ Cache HIT: ListadoRecursos ({tipo_fuente}) - {len(cached_data)} plantas")
-        return cached_data
+    # CACHE ELIMINADO - Consulta directa a SQLite/API
     
     try:
         objetoAPI = get_objetoAPI()
@@ -165,18 +160,15 @@ def obtener_listado_recursos_desde_api(tipo_fuente='EOLICA'):
         fecha_fin = date.today() - timedelta(days=14)
         fecha_inicio = fecha_fin - timedelta(days=7)
         
-        logger.warning(f"⚠️ Consultando ListadoRecursos API ({tipo_fuente}) - LENTO...")
+        logger.info(f"✅ Consultando ListadoRecursos desde SQLite ({tipo_fuente})...")
         
-        # Usar fetch_metric_data con cache
-        recursos = fetch_metric_data("ListadoRecursos", "Sistema", 
-                                     fecha_inicio.strftime('%Y-%m-%d'), 
-                                     fecha_fin.strftime('%Y-%m-%d'))
+        # ✅ OPTIMIZADO: Usar obtener_datos_inteligente (SQLite)
+        recursos, warning = obtener_datos_inteligente("ListadoRecursos", "Sistema", 
+                                                       fecha_inicio.strftime('%Y-%m-%d'), 
+                                                       fecha_fin.strftime('%Y-%m-%d'))
         
         if recursos is not None and not recursos.empty:
-            logger.info(f"✅ API: {len(recursos)} recursos obtenidos")
-            
-            # Guardar en cache para futuras consultas
-            save_to_cache(cache_key, recursos, cache_type='listado_recursos')
+            logger.info(f"✅ SQLite/API: {len(recursos)} recursos obtenidos")
             
             # Filtrar por tipo
             if tipo_fuente.upper() != 'TODAS':
@@ -253,16 +245,10 @@ def _detectar_columna_sic(recursos_df: pd.DataFrame, f_ini: date, f_fin: date):
     """
     # CACHE PERSISTENTE: La estructura de columnas no cambia
     cols_hash = hashlib.md5(str(sorted(recursos_df.columns)).encode()).hexdigest()[:8]
-    cache_key = get_cache_key('deteccion_columna_sic', cols_hash)
-    cached_col = get_from_cache(cache_key, allow_expired=False)
+    # cache_key = get_cache_key('deteccion_columna_sic', cols_hash)
+    # cached_col = get_from_cache(cache_key, allow_expired=False)
     
-    if cached_col is not None:
-        # Verificar que la columna siga existiendo
-        if cached_col in recursos_df.columns:
-            logger.info(f"✅ Cache HIT: Columna SIC = {cached_col}")
-            return cached_col
-        else:
-            logger.warning(f"⚠️ Cache inválido: columna {cached_col} no existe")
+    # CACHE ELIMINADO - Detección directa cada vez
     
     objetoAPI = get_objetoAPI()
     if recursos_df is None or recursos_df.empty or objetoAPI is None:
@@ -284,18 +270,18 @@ def _detectar_columna_sic(recursos_df: pd.DataFrame, f_ini: date, f_fin: date):
         if len(cods) < 2:
             continue
         try:
-            # ✅ OPTIMIZADO: Usar fetch_metric_data con cache
-            prueba = fetch_metric_data("Gene", "Recurso", 
-                                       f_ini.strftime('%Y-%m-%d'), 
-                                       f_fin.strftime('%Y-%m-%d'))
+            # ✅ OPTIMIZADO: Usar obtener_datos_inteligente (SQLite)
+            prueba, warning = obtener_datos_inteligente("Gene", "Recurso", 
+                                                         f_ini.strftime('%Y-%m-%d'), 
+                                                         f_fin.strftime('%Y-%m-%d'))
             if prueba is not None and not prueba.empty:
                 if 'Values_code' in prueba.columns and prueba['Values_code'].astype(str).isin(cods).any():
                     logger.info(f"✅ Columna SIC detectada: {col}")
                     # GUARDAR EN CACHE PERSISTENTE (30 días)
-                    save_to_cache(cache_key, col, cache_type='deteccion_columna')
+                    # save_to_cache(cache_key, col, cache_type='deteccion_columna')
                     return col
                 logger.info(f"✅ Columna SIC detectada (sin Values_code): {col}")
-                save_to_cache(cache_key, col, cache_type='deteccion_columna')
+                # save_to_cache(cache_key, col, cache_type='deteccion_columna')
                 return col
         except Exception as e:
             print(f"Candidata {col} falló: {e}")
@@ -449,10 +435,27 @@ def obtener_generacion_agregada_por_tipo(fecha_inicio, fecha_fin, tipo_fuente='H
                        .loc[lambda s: s.str.match(r'^[A-Z0-9]{3,6}$', na=False)]
                        .unique().tolist())
         
-        logger.info(f"📋 {len(codigos_tipo)} códigos de {tipo_fuente} identificados")
+        logger.info(f"📋 {len(codigos_tipo)} códigos de {tipo_fuente} en catálogo")
         
         if not codigos_tipo:
             logger.warning(f"⚠️ Sin códigos válidos para {tipo_fuente}")
+            return pd.DataFrame()
+        
+        # ═══════════════════════════════════════════════════════════════
+        # PASO 1.5: OPTIMIZACIÓN - Obtener solo códigos con datos reales
+        # ═══════════════════════════════════════════════════════════════
+        # Para rangos grandes (>30 días), primero verificar qué códigos tienen datos
+        dias_rango = (fecha_fin_dt - fecha_inicio_dt).days
+        if dias_rango > 30:
+            from utils.db_manager import get_codigos_con_datos
+            codigos_con_datos = get_codigos_con_datos('Gene', 'Recurso', fecha_inicio, fecha_fin)
+            
+            # Intersección: solo códigos que están en el catálogo Y tienen datos
+            codigos_tipo = list(set(codigos_tipo) & set(codigos_con_datos))
+            logger.info(f"🎯 Optimización: {len(codigos_tipo)} códigos con datos reales en el rango")
+        
+        if not codigos_tipo:
+            logger.warning(f"⚠️ Sin datos para {tipo_fuente} en el rango {fecha_inicio} → {fecha_fin}")
             return pd.DataFrame()
         
         # ═══════════════════════════════════════════════════════════════
@@ -468,7 +471,7 @@ def obtener_generacion_agregada_por_tipo(fecha_inicio, fecha_fin, tipo_fuente='H
             'Recurso',
             fecha_inicio,
             fecha_fin,
-            recurso_filter=codigos_tipo  # Filtrar solo códigos de este tipo
+            recurso_filter=codigos_tipo  # Filtrar solo códigos con datos reales
         )
         with open('/home/admonctrlxm/server/logs/timing.log', 'a') as f:
             f.write(f"[{time.strftime('%H:%M:%S')}] get_metric_data: {(time.time()-t2)*1000:.0f}ms, {len(df_gene) if df_gene is not None else 0} registros\n")
@@ -559,7 +562,7 @@ def obtener_generacion_agregada_por_tipo(fecha_inicio, fecha_fin, tipo_fuente='H
         traceback.print_exc()
         
         # En caso de error, intentar retornar cache antiguo
-        cached_data = get_from_cache(cache_key, allow_expired=True, max_age_days=30)
+        # cached_data = get_from_cache(cache_key, allow_expired=True, max_age_days=30)
         if cached_data is not None:
             logger.warning(f"⚠️ Usando cache antiguo (por error) para {tipo_fuente}")
             return cached_data
@@ -1024,10 +1027,10 @@ def crear_fichas_generacion_xm():
         print("\n🔍 PASO 1: Obteniendo ListadoRecursos...")
         codigo_info = {}
         try:
-            # ✅ OPTIMIZADO: Usar fetch_metric_data con cache
-            recursos_df = fetch_metric_data("ListadoRecursos", "Sistema", 
-                                            fecha_inicio.strftime('%Y-%m-%d'), 
-                                            fecha_fin.strftime('%Y-%m-%d'))
+            # ✅ OPTIMIZADO: Usar obtener_datos_inteligente (SQLite)
+            recursos_df, warning = obtener_datos_inteligente("ListadoRecursos", "Sistema", 
+                                                              fecha_inicio.strftime('%Y-%m-%d'), 
+                                                              fecha_fin.strftime('%Y-%m-%d'))
             if recursos_df is not None and not recursos_df.empty:
                 print(f"✅ ListadoRecursos obtenidos: {len(recursos_df)} recursos")
                 for _, row in recursos_df.iterrows():
@@ -1045,9 +1048,11 @@ def crear_fichas_generacion_xm():
             print(f"⚠️ Error obteniendo ListadoRecursos, continuo con heurística por código: {e}")
             recursos_df = pd.DataFrame()
         
-        # PASO 2: Obtener datos de generación Gene/Recurso
-        print("\n🔍 PASO 2: Obteniendo Gene/Recurso...")
-        df_gene = objetoAPI.request_data("Gene", "Recurso", fecha_inicio, fecha_fin)
+        # PASO 2: Obtener datos de generación Gene/Recurso desde SQLite
+        print("\n🔍 PASO 2: Obteniendo Gene/Recurso desde SQLite...")
+        df_gene, warning = obtener_datos_inteligente("Gene", "Recurso", 
+                                                      fecha_inicio.strftime('%Y-%m-%d'), 
+                                                      fecha_fin.strftime('%Y-%m-%d'))
         
         if df_gene is None or df_gene.empty:
             return dbc.Alert("No se obtuvieron datos de generación", color="warning")
@@ -1296,14 +1301,16 @@ def crear_grafica_barras_apiladas():
     """Crear gráfica de barras apiladas por fuente de energía como en SinergoX"""
     try:
         px, go = get_plotly_modules()
-        from utils._xm import fetch_metric_data
+        from utils._xm import obtener_datos_inteligente
         
         fecha_fin = date.today() - timedelta(days=1)
         fecha_inicio = fecha_fin - timedelta(days=30)  # Últimos 30 días
         
-        print(f"🔍 Obteniendo datos para gráfica barras: {fecha_inicio} - {fecha_fin}")
+        print(f"🔍 Obteniendo datos para gráfica barras desde SQLite: {fecha_inicio} - {fecha_fin}")
         
-        df_gene = fetch_metric_data('Gene', 'Recurso', fecha_inicio, fecha_fin)
+        df_gene, warning = obtener_datos_inteligente('Gene', 'Recurso', 
+                                                      fecha_inicio.strftime('%Y-%m-%d'), 
+                                                      fecha_fin.strftime('%Y-%m-%d'))
         
         if df_gene is None or df_gene.empty:
             return go.Figure().add_annotation(
@@ -1346,10 +1353,10 @@ def crear_grafica_barras_apiladas():
         objetoAPI = get_objetoAPI()
         if objetoAPI:
             try:
-                # ✅ OPTIMIZADO: Usar fetch_metric_data con cache
-                recursos_df = fetch_metric_data("ListadoRecursos", "Sistema", 
-                                                fecha_inicio.strftime('%Y-%m-%d'), 
-                                                fecha_fin.strftime('%Y-%m-%d'))
+                # ✅ OPTIMIZADO: Usar obtener_datos_inteligente (SQLite)
+                recursos_df, warning = obtener_datos_inteligente("ListadoRecursos", "Sistema", 
+                                                                  fecha_inicio.strftime('%Y-%m-%d'), 
+                                                                  fecha_fin.strftime('%Y-%m-%d'))
                 if recursos_df is not None and not recursos_df.empty:
                     codigo_tipo = {}
                     for _, row in recursos_df.iterrows():
@@ -1441,14 +1448,16 @@ def crear_grafica_area():
     """Crear gráfica de área temporal por fuente como en SinergoX"""
     try:
         px, go = get_plotly_modules()
-        from utils._xm import fetch_metric_data
+        from utils._xm import obtener_datos_inteligente
         
         fecha_fin = date.today() - timedelta(days=1)
         fecha_inicio = fecha_fin - timedelta(days=7)  # Últimos 7 días para mejor visualización horaria
         
-        print(f"🔍 Obteniendo datos para gráfica área: {fecha_inicio} - {fecha_fin}")
+        print(f"🔍 Obteniendo datos para gráfica área desde SQLite: {fecha_inicio} - {fecha_fin}")
         
-        df_gene = fetch_metric_data('Gene', 'Recurso', fecha_inicio, fecha_fin)
+        df_gene, warning = obtener_datos_inteligente('Gene', 'Recurso', 
+                                                      fecha_inicio.strftime('%Y-%m-%d'), 
+                                                      fecha_fin.strftime('%Y-%m-%d'))
         
         if df_gene is None or df_gene.empty:
             return go.Figure().add_annotation(
@@ -1829,14 +1838,16 @@ def crear_tabla_resumen_todas_plantas_DISABLED(df, fecha_inicio, fecha_fin):
 def crear_tabla_resumen_todas_plantas():
     """Crear tabla resumen con todas las plantas de todas las fuentes (Top 20 por generación)"""
     try:
-        from utils._xm import fetch_metric_data
+        from utils._xm import obtener_datos_inteligente
         
         fecha_fin = date.today() - timedelta(days=1)
         fecha_inicio = fecha_fin - timedelta(days=7)  # Últimos 7 días
         
-        print(f"🔍 Obteniendo datos para tabla resumen: {fecha_inicio} - {fecha_fin}")
+        print(f"🔍 Obteniendo datos para tabla resumen desde SQLite: {fecha_inicio} - {fecha_fin}")
         
-        df_gene = fetch_metric_data('Gene', 'Recurso', fecha_inicio, fecha_fin)
+        df_gene, warning = obtener_datos_inteligente('Gene', 'Recurso', 
+                                                      fecha_inicio.strftime('%Y-%m-%d'), 
+                                                      fecha_fin.strftime('%Y-%m-%d'))
         
         if df_gene is None or df_gene.empty:
             return html.Div([
@@ -2181,45 +2192,52 @@ def layout():
             html.H4("📅 Comparación de Años Completos", className="text-center mb-4",
                    style={'color': '#2c3e50', 'fontWeight': '600'}),
             
-            dbc.Row([
-                # COLUMNA AÑO 1
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardHeader("Año 1", style={'backgroundColor': '#007bff', 'color': 'white', 'textAlign': 'center'}),
-                        dbc.CardBody([
-                            dcc.Dropdown(
-                                id='year-1-dropdown',
-                                options=[{'label': str(y), 'value': y} for y in [2025, 2024, 2023, 2022]],
-                                value=2025,
-                                clearable=False
-                            ),
-                            html.Hr(),
-                            html.Div(id='contenido-year-1', children=[
-                                dbc.Alert("Selecciona un año y haz clic en actualizar", color="info")
-                            ])
-                        ])
-                    ])
-                ], md=6),
-                
-                # COLUMNA AÑO 2
-                dbc.Col([
-                    dbc.Card([
-                        dbc.CardHeader("Año 2", style={'backgroundColor': '#28a745', 'color': 'white', 'textAlign': 'center'}),
-                        dbc.CardBody([
-                            dcc.Dropdown(
-                                id='year-2-dropdown',
-                                options=[{'label': str(y), 'value': y} for y in [2025, 2024, 2023, 2022]],
-                                value=2024,
-                                clearable=False
-                            ),
-                            html.Hr(),
-                            html.Div(id='contenido-year-2', children=[
-                                dbc.Alert("Selecciona un año y haz clic en actualizar", color="info")
-                            ])
-                        ])
-                    ])
-                ], md=6),
-            ])
+            # FILTRO MULTISELECTOR DE AÑOS
+            dbc.Card([
+                dbc.CardBody([
+                    html.H6("Selecciona los años a comparar:", className="mb-3", 
+                           style={'fontWeight': '600', 'color': '#2c3e50'}),
+                    dcc.Dropdown(
+                        id='years-multiselector',
+                        options=[{'label': str(y), 'value': y} for y in range(2021, 2026)],  # 2021-2025 (2020 datos incompletos)
+                        value=[2024, 2025],  # Por defecto 2 años seleccionados
+                        multi=True,  # Permite múltiples selecciones
+                        placeholder="Selecciona uno o más años...",
+                        clearable=False
+                    ),
+                    html.Small("Nota: Datos disponibles desde 2021 (año completo)", 
+                              className="text-muted", style={'fontSize': '0.85rem'}),
+                    dbc.Button(
+                        "Actualizar Comparación",
+                        id='btn-actualizar-comparacion',
+                        color="primary",
+                        className="mt-3 w-100",
+                        size="lg"
+                    )
+                ])
+            ], className="mb-4"),
+            
+            # GRÁFICA DE LÍNEAS TEMPORALES
+            dcc.Loading(
+                id="loading-grafica-lineas-anual",
+                type="default",
+                children=html.Div([
+                    html.H5("Evolución Temporal de Generación por Año", className="text-center mb-3",
+                           style={'fontWeight': '600', 'color': '#2c3e50'}),
+                    dcc.Graph(id='grafica-lineas-temporal-anual', config={'displayModeBar': False})
+                ])
+            ),
+            
+            html.Hr(className="my-4"),
+            
+            # GRÁFICAS DE TORTA - Una por cada año seleccionado
+            html.H5("Participación por Fuente de Energía", className="text-center mb-4",
+                   style={'fontWeight': '600', 'color': '#2c3e50'}),
+            dcc.Loading(
+                id="loading-tortas-anuales",
+                type="default",
+                children=html.Div(id='contenedor-tortas-anuales', className="mb-4")
+            )
         ]),  # FIN contenido-comparacion-anual
         
     ], fluid=True, className="py-4")
@@ -2793,11 +2811,11 @@ def crear_fichas_generacion_xm_con_fechas(fecha_inicio, fecha_fin, tipo_fuente='
         print(f"=" * 80)
         
         # PASO 1: Obtener ListadoRecursos para mapear códigos
-        print("\n🔍 PASO 1: Obteniendo ListadoRecursos...")
-        # ✅ OPTIMIZADO: Usar fetch_metric_data con cache (listados siempre actuales)
-        recursos_df = fetch_metric_data("ListadoRecursos", "Sistema", 
-                                        fecha_inicio.strftime('%Y-%m-%d'), 
-                                        fecha_fin.strftime('%Y-%m-%d'))
+        print("\n🔍 PASO 1: Obteniendo ListadoRecursos desde SQLite...")
+        # ✅ OPTIMIZADO: Usar obtener_datos_inteligente (SQLite)
+        recursos_df, warning = obtener_datos_inteligente("ListadoRecursos", "Sistema", 
+                                                          fecha_inicio.strftime('%Y-%m-%d'), 
+                                                          fecha_fin.strftime('%Y-%m-%d'))
         
         if recursos_df is None or recursos_df.empty:
             return dbc.Alert("No se pudo obtener ListadoRecursos", color="warning")
@@ -3063,3 +3081,247 @@ def crear_fichas_generacion_xm_con_fechas(fecha_inicio, fecha_fin, tipo_fuente='
         import traceback
         traceback.print_exc()
         return dbc.Alert(f"Error al cargar las fichas de generación: {str(e)}", color="danger")
+
+
+# ==================================================================
+# CALLBACKS PARA COMPARACIÓN ANUAL (MULTISELECTOR)
+# ==================================================================
+
+@callback(
+    [Output('grafica-lineas-temporal-anual', 'figure'),
+     Output('contenedor-tortas-anuales', 'children')],
+    Input('btn-actualizar-comparacion', 'n_clicks'),
+    State('years-multiselector', 'value'),
+    prevent_initial_call=True
+)
+def actualizar_comparacion_anual(n_clicks, years_selected):
+    """
+    Callback para actualizar:
+    1. Gráfica de líneas temporales (una línea por año)
+    2. Gráficas de torta (una torta por año con participación % por fuente)
+    """
+    px, go = get_plotly_modules()
+    
+    if not years_selected or len(years_selected) == 0:
+        return (
+            go.Figure().add_annotation(text="Selecciona al menos un año", xref="paper", yref="paper", x=0.5, y=0.5),
+            dbc.Alert("Por favor selecciona al menos un año para comparar", color="warning")
+        )
+    
+    try:
+        # Colores únicos para cada año
+        colores_años = {
+            2020: '#1f77b4',
+            2021: '#ff7f0e',
+            2022: '#2ca02c',
+            2023: '#d62728',
+            2024: '#9467bd',
+            2025: '#8c564b'
+        }
+        
+        # ============================================================
+        # 1. OBTENER DATOS DE GENERACIÓN PARA CADA AÑO SELECCIONADO
+        # ============================================================
+        datos_todos_años = []
+        
+        for year in sorted(years_selected):
+            logger.info(f"📅 Obteniendo datos para año {year}...")
+            
+            # Definir fechas del año completo
+            fecha_inicio = date(year, 1, 1)
+            fecha_fin = date(year, 12, 31)
+            
+            # Si es el año actual, usar solo hasta hoy
+            if year == date.today().year:
+                fecha_fin = date.today() - timedelta(days=1)
+            
+            # Obtener datos de generación agregada por tipo
+            # Usamos la función existente que consulta SQLite
+            df_year_hidraulica = obtener_generacion_agregada_por_tipo(
+                fecha_inicio.strftime('%Y-%m-%d'),
+                fecha_fin.strftime('%Y-%m-%d'),
+                'HIDRAULICA'
+            )
+            
+            df_year_termica = obtener_generacion_agregada_por_tipo(
+                fecha_inicio.strftime('%Y-%m-%d'),
+                fecha_fin.strftime('%Y-%m-%d'),
+                'TERMICA'
+            )
+            
+            df_year_eolica = obtener_generacion_agregada_por_tipo(
+                fecha_inicio.strftime('%Y-%m-%d'),
+                fecha_fin.strftime('%Y-%m-%d'),
+                'EOLICA'
+            )
+            
+            df_year_solar = obtener_generacion_agregada_por_tipo(
+                fecha_inicio.strftime('%Y-%m-%d'),
+                fecha_fin.strftime('%Y-%m-%d'),
+                'SOLAR'
+            )
+            
+            df_year_biomasa = obtener_generacion_agregada_por_tipo(
+                fecha_inicio.strftime('%Y-%m-%d'),
+                fecha_fin.strftime('%Y-%m-%d'),
+                'BIOMASA'
+            )
+            
+            # Combinar todos los tipos de fuente para este año
+            df_year_completo = pd.concat([
+                df_year_hidraulica,
+                df_year_termica,
+                df_year_eolica,
+                df_year_solar,
+                df_year_biomasa
+            ], ignore_index=True)
+            
+            if not df_year_completo.empty:
+                df_year_completo['Año'] = year
+                datos_todos_años.append(df_year_completo)
+        
+        if not datos_todos_años:
+            return (
+                go.Figure().add_annotation(text="No hay datos disponibles para los años seleccionados", 
+                                         xref="paper", yref="paper", x=0.5, y=0.5),
+                dbc.Alert("No se encontraron datos para los años seleccionados", color="warning")
+            )
+        
+        # Combinar todos los años
+        df_completo = pd.concat(datos_todos_años, ignore_index=True)
+        df_completo['Fecha'] = pd.to_datetime(df_completo['Fecha'])
+        
+        # ============================================================
+        # 2. CREAR GRÁFICA DE LÍNEAS TEMPORALES SUPERPUESTAS
+        # ============================================================
+        
+        # Agregar por fecha y año (suma total de todas las fuentes por día)
+        df_por_dia_año = df_completo.groupby(['Año', 'Fecha'], as_index=False)['Generacion_GWh'].sum()
+        
+        # Crear fecha normalizada (mismo año base 2024 para superposición)
+        df_por_dia_año['MesDia'] = df_por_dia_año['Fecha'].dt.strftime('%m-%d')
+        df_por_dia_año['FechaNormalizada'] = pd.to_datetime('2024-' + df_por_dia_año['MesDia'])
+        
+        # Crear gráfica de líneas superpuestas
+        fig_lineas = go.Figure()
+        
+        for year in sorted(years_selected):
+            df_year = df_por_dia_año[df_por_dia_año['Año'] == year].sort_values('FechaNormalizada')
+            
+            # Crear texto customizado para hover con fecha real
+            hover_text = [
+                f"<b>{year}</b><br>{fecha.strftime('%d de %B de %Y')}<br>Generación: {gen:.2f} GWh"
+                for fecha, gen in zip(df_year['Fecha'], df_year['Generacion_GWh'])
+            ]
+            
+            fig_lineas.add_trace(
+                go.Scatter(
+                    x=df_year['FechaNormalizada'],
+                    y=df_year['Generacion_GWh'],
+                    mode='lines',
+                    name=str(year),
+                    line=dict(color=colores_años.get(year, '#666'), width=2),
+                    hovertext=hover_text,
+                    hoverinfo='text'
+                )
+            )
+        
+        fig_lineas.update_layout(
+            title="Generación Diaria Total (GWh)",
+            xaxis_title="Fecha",
+            yaxis_title="Generación (GWh)",
+            hovermode='x unified',
+            template='plotly_white',
+            height=500,
+            showlegend=True,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            ),
+            xaxis=dict(
+                tickformat='%d %b',  # Formato: "01 Ene", "15 Feb", etc. (sin año)
+                dtick='M1',  # Marca cada mes
+                tickangle=-45
+            )
+        )
+        
+        # ============================================================
+        # 3. CREAR GRÁFICAS DE TORTA (una por año)
+        # ============================================================
+        
+        tortas_anuales = []
+        
+        for year in sorted(years_selected):
+            # Filtrar datos del año
+            df_year = df_completo[df_completo['Año'] == year]
+            
+            # Agrupar por tipo de fuente
+            df_por_fuente = df_year.groupby('Tipo', as_index=False)['Generacion_GWh'].sum()
+            
+            # Calcular participación %
+            total = df_por_fuente['Generacion_GWh'].sum()
+            df_por_fuente['Participacion_%'] = (df_por_fuente['Generacion_GWh'] / total * 100).round(2)
+            
+            # Colores por fuente
+            colores_fuente = {
+                'Hidráulica': '#1f77b4',
+                'Térmica': '#ff7f0e',
+                'Eólica': '#2ca02c',
+                'Solar': '#ffbb33',
+                'Biomasa': '#17becf',
+            }
+            
+            # Crear gráfica de torta
+            fig_torta = go.Figure()
+            fig_torta.add_trace(
+                go.Pie(
+                    labels=df_por_fuente['Tipo'],
+                    values=df_por_fuente['Participacion_%'],
+                    marker=dict(colors=[colores_fuente.get(tipo, '#666') for tipo in df_por_fuente['Tipo']]),
+                    textposition='inside',
+                    textinfo='label+percent',
+                    hovertemplate='<b>%{label}</b><br>Participación: %{value:.2f}%<br>Generación: %{customdata:.2f} GWh<extra></extra>',
+                    customdata=df_por_fuente['Generacion_GWh']
+                )
+            )
+            
+            fig_torta.update_layout(
+                title=f"Participación por Fuente - {year}",
+                template='plotly_white',
+                height=400,
+                showlegend=True,
+                legend=dict(
+                    orientation="v",
+                    yanchor="middle",
+                    y=0.5,
+                    xanchor="left",
+                    x=1.05
+                )
+            )
+            
+            # Agregar tarjeta con la torta
+            tortas_anuales.append(
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardBody([
+                            dcc.Graph(figure=fig_torta, config={'displayModeBar': False})
+                        ])
+                    ], className="shadow-sm")
+                ], lg=6, md=12, className="mb-4")
+            )
+        
+        # Organizar tortas en filas
+        contenedor_tortas = dbc.Row(tortas_anuales)
+        
+        return fig_lineas, contenedor_tortas
+        
+    except Exception as e:
+        logger.error(f"❌ Error en comparación anual: {e}")
+        traceback.print_exc()
+        return (
+            go.Figure().add_annotation(text=f"Error: {str(e)}", xref="paper", yref="paper", x=0.5, y=0.5),
+            dbc.Alert(f"Error procesando datos: {str(e)}", color="danger")
+        )
