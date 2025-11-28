@@ -467,6 +467,172 @@ def get_mapeo_codigos(catalogo: str) -> dict:
         return {}
 
 
+def get_codigos_con_datos(metrica: str, entidad: str, fecha_inicio: str, fecha_fin: str) -> List[str]:
+    """
+    Obtiene lista de códigos de recurso que tienen datos en un rango de fechas.
+    Útil para optimizar consultas evitando buscar códigos sin datos.
+    
+    Args:
+        metrica: Nombre de la métrica (ej: 'Gene')
+        entidad: Tipo de entidad (ej: 'Recurso')
+        fecha_inicio: Fecha inicio en formato 'YYYY-MM-DD'
+        fecha_fin: Fecha fin en formato 'YYYY-MM-DD'
+    
+    Returns:
+        Lista de códigos de recurso que tienen al menos un dato en el rango
+    
+    Ejemplo:
+        codigos = get_codigos_con_datos('Gene', 'Recurso', '2024-01-01', '2024-12-31')
+        # ['2QBW', '2QEK', '2QRL', ...]
+    """
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT DISTINCT recurso
+                FROM metrics
+                WHERE metrica = ?
+                    AND entidad = ?
+                    AND fecha BETWEEN ? AND ?
+                    AND recurso IS NOT NULL
+                    AND recurso != '_SISTEMA_'
+            """, (metrica, entidad, fecha_inicio, fecha_fin))
+            
+            codigos = [row[0] for row in cursor.fetchall()]
+            logger.info(f"✅ {len(codigos)} códigos con datos en {fecha_inicio} → {fecha_fin}")
+            return codigos
+            
+    except sqlite3.Error as e:
+        logger.error(f"❌ Error obteniendo códigos con datos: {e}")
+        return []
+
+
+# ============================================================================
+# FUNCIONES PARA DATOS HORARIOS
+# ============================================================================
+
+def upsert_hourly_metrics_bulk(metrics_data: List[Tuple]) -> int:
+    """
+    Insertar/actualizar múltiples métricas horarias de forma eficiente (bulk)
+    
+    Args:
+        metrics_data: Lista de tuplas (fecha, metrica, entidad, recurso, hora, valor_mwh)
+    
+    Returns:
+        Número de registros procesados
+    """
+    if not metrics_data:
+        return 0
+    
+    query = """
+        INSERT INTO metrics_hourly (fecha, metrica, entidad, recurso, hora, valor_mwh, unidad)
+        VALUES (?, ?, ?, ?, ?, ?, 'MWh')
+        ON CONFLICT(fecha, metrica, entidad, recurso, hora) 
+        DO UPDATE SET 
+            valor_mwh = excluded.valor_mwh,
+            fecha_actualizacion = CURRENT_TIMESTAMP
+    """
+    
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.executemany(query, metrics_data)
+            conn.commit()
+            
+            registros_afectados = cursor.rowcount
+            logger.info(f"✅ Bulk insert horario: {registros_afectados} registros procesados")
+            return registros_afectados
+            
+    except sqlite3.Error as e:
+        logger.error(f"❌ Error en bulk insert horario: {e}")
+        return 0
+
+
+def get_hourly_data(metrica: str, entidad: str, fecha: str, recurso: str = None) -> pd.DataFrame:
+    """
+    Obtener datos horarios de una métrica para una fecha específica
+    
+    Args:
+        metrica: Nombre de la métrica ('DemaCome', 'DemaReal', etc.)
+        entidad: Tipo de entidad ('Sistema', 'Agente', 'Recurso')
+        fecha: Fecha en formato 'YYYY-MM-DD'
+        recurso: Código de recurso/agente (opcional, None para Sistema)
+    
+    Returns:
+        DataFrame con columnas: hora, valor_mwh
+    """
+    query = """
+        SELECT hora, valor_mwh, unidad
+        FROM metrics_hourly
+        WHERE metrica = ?
+        AND entidad = ?
+        AND fecha = ?
+    """
+    
+    params = [metrica, entidad, fecha]
+    
+    if recurso is not None:
+        query += " AND recurso = ?"
+        params.append(recurso)
+    else:
+        query += " AND recurso IS NULL"
+    
+    query += " ORDER BY hora"
+    
+    try:
+        with get_connection() as conn:
+            df = pd.read_sql_query(query, conn, params=params)
+            
+            if not df.empty:
+                logger.info(f"✅ Datos horarios: {len(df)} horas para {metrica}/{entidad} en {fecha}")
+            else:
+                logger.warning(f"⚠️ Sin datos horarios para {metrica}/{entidad} en {fecha}")
+            
+            return df
+            
+    except sqlite3.Error as e:
+        logger.error(f"❌ Error obteniendo datos horarios: {e}")
+        return pd.DataFrame()
+
+
+def get_hourly_data_aggregated(metrica: str, entidad: str, fecha: str) -> pd.DataFrame:
+    """
+    Obtener datos horarios agregados (suma de todos los recursos/agentes) para una fecha
+    
+    Args:
+        metrica: Nombre de la métrica
+        entidad: Tipo de entidad
+        fecha: Fecha en formato 'YYYY-MM-DD'
+    
+    Returns:
+        DataFrame con columnas: hora, valor_mwh (suma de todos los recursos)
+    """
+    query = """
+        SELECT hora, SUM(valor_mwh) as valor_mwh
+        FROM metrics_hourly
+        WHERE metrica = ?
+        AND entidad = ?
+        AND fecha = ?
+        GROUP BY hora
+        ORDER BY hora
+    """
+    
+    try:
+        with get_connection() as conn:
+            df = pd.read_sql_query(query, conn, params=[metrica, entidad, fecha])
+            
+            if not df.empty:
+                logger.info(f"✅ Datos horarios agregados: {len(df)} horas para {metrica}/{entidad} en {fecha}")
+            else:
+                logger.warning(f"⚠️ Sin datos horarios agregados para {metrica}/{entidad} en {fecha}")
+            
+            return df
+            
+    except sqlite3.Error as e:
+        logger.error(f"❌ Error obteniendo datos horarios agregados: {e}")
+        return pd.DataFrame()
+
+
 # ============================================================================
 # INICIALIZACIÓN AUTOMÁTICA
 # ============================================================================

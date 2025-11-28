@@ -1,29 +1,38 @@
 /* =================================================================
-   ANIMACIONES PARA MÓDULOS PNG SOBRE SVG
+   ANIMACIONES PARA NUEVA ARQUITECTURA DE PORTADA
    ================================================================= */
 
-/* Animación de flotación suave restaurada */
+/* Animación de flotación suave SOLO para portada_secciones.png */
 @keyframes gentle-float {
     0%, 100% {
-        transform: translateY(0px);
+        transform: translate(-50%, -50%) translateY(0px);
     }
     50% {
-        transform: translateY(-8px);
+        transform: translate(-50%, -50%) translateY(-10px);
     }
 }
 
-/* Contenedor de flotación */
-.floating-container {
-    animation: gentle-float 4s ease-in-out infinite;
+/* Aplicar flotación SOLO a la ilustración de secciones */
+.floating-sections {
+    animation: gentle-float 5s ease-in-out infinite;
 }
 
-/* Efecto de flotación suave en las imágenes CON SOMBRA AMARILLA */
-.floating-module {
-    animation: gentle-float 4s ease-in-out infinite;
-    transition: all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-    /* Sombra amarilla sutil para disimular diferencias con el fondo */
-    filter: drop-shadow(0 8px 20px rgba(255, 193, 7, 0.35)) 
-            drop-shadow(0 4px 10px rgba(255, 165, 0, 0.25));
+/* Botones SIN flotación (solo hover) */
+.button-module {
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.3));
+}
+
+/* Animación de pulso para botón de información */
+@keyframes pulse {
+    0%, 100% {
+        transform: translate(-50%, -50%) scale(1);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.6), 0 0 0 4px rgba(242,195,48,0.5);
+    }
+    50% {
+        transform: translate(-50%, -50%) scale(1.05);
+        box-shadow: 0 12px 35px rgba(0,0,0,0.7), 0 0 0 6px rgba(242,195,48,0.7);
+    }
 }
 
 /* Contenedor de módulo con transiciones suaves */

@@ -45,6 +45,37 @@ CREATE INDEX idx_fecha_metrica_entidad ON metrics(fecha, metrica, entidad);
 CREATE INDEX idx_recurso ON metrics(recurso) WHERE recurso IS NOT NULL;
 
 -- ============================================================================
+-- TABLA: metrics_hourly
+-- Descripción: Almacena métricas con desagregación horaria (24 horas)
+-- Propósito: Análisis detallado por hora del día
+-- ============================================================================
+DROP TABLE IF EXISTS metrics_hourly;
+
+CREATE TABLE metrics_hourly (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fecha DATE NOT NULL,
+    metrica VARCHAR(50) NOT NULL,           -- 'DemaCome', 'DemaReal', 'Gene', etc.
+    entidad VARCHAR(100) NOT NULL,          -- 'Sistema', 'Agente', 'Recurso'
+    recurso VARCHAR(100),                   -- Código de agente/recurso (puede ser NULL para Sistema)
+    hora INTEGER NOT NULL,                  -- 1 a 24
+    valor_mwh REAL NOT NULL,                -- Valor en MWh (conversión de kWh)
+    unidad VARCHAR(10) DEFAULT 'MWh',
+    fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Constraint único: evita duplicados
+    UNIQUE(fecha, metrica, entidad, recurso, hora),
+    
+    -- Validación: hora debe estar entre 1 y 24
+    CHECK(hora >= 1 AND hora <= 24)
+);
+
+-- Índices para consultas rápidas
+CREATE INDEX idx_hourly_fecha ON metrics_hourly(fecha);
+CREATE INDEX idx_hourly_metrica_entidad ON metrics_hourly(metrica, entidad);
+CREATE INDEX idx_hourly_fecha_metrica ON metrics_hourly(fecha, metrica);
+CREATE INDEX idx_hourly_fecha_metrica_entidad ON metrics_hourly(fecha, metrica, entidad);
+
+-- ============================================================================
 -- TABLA: catalogos
 -- Descripción: Almacena catálogos de XM (ListadoRecursos, ListadoEmbalses, etc.)
 -- Propósito: Mapear códigos a nombres (ej: "2QBW" → "GUAVIO")

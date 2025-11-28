@@ -7,10 +7,10 @@ from utils.config import COLORS
 
 register_page(
     __name__,
-    path="/distribucion",
-    name="Distribución",
+    path="/distribucion-opciones",
+    name="Distribución (Opciones)",
     title="Distribución Eléctrica - Ministerio de Minas y Energía",
-    order=10
+    order=99  # Oculto del menú principal
 )
 
 # Definir las subsecciones de distribución

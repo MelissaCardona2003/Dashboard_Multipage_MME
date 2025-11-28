@@ -45,8 +45,7 @@ def crear_sidebar_universal():
             # Header del sidebar
             html.Div([
                 html.Div([
-                    html.I(className="fas fa-robot me-2", style={"color": COLORS['primary']}),
-                    html.H6("IA Energético", className="mb-0", style={"color": COLORS['primary'], "fontWeight": "bold"})
+                    html.H6("Portal Energético", className="mb-0", style={"color": "#3D3D3D", "fontWeight": "bold", "fontSize": "1.1rem"})
                 ], className="d-flex align-items-center"),
                 
                 html.Button([
@@ -65,11 +64,11 @@ def crear_sidebar_universal():
             # Contenido del sidebar
             html.Div([
                 # Enlaces de navegación principales
-                html.H6("🏠 Navegación Principal", className="mb-3", style={'color': COLORS['primary'], 'fontWeight': '600'}),
+                html.H6("🏠 Navegación Principal", className="mb-3", style={'color': '#3D3D3D', 'fontWeight': '600', 'fontSize': '0.95rem'}),
                 
                 # Inicio
                 dbc.NavLink([
-                    html.I(className="fas fa-home me-3", style={"color": COLORS['primary']}),
+                    html.I(className="fas fa-home me-3", style={"color": "#8B5CF6"}),
                     "Inicio"
                 ], href="/", active="exact", className="nav-link-sidebar mb-2"),
                 
@@ -82,38 +81,20 @@ def crear_sidebar_universal():
                 html.Hr(),
                 
                 # Sectores del Sistema Energético
-                html.H6("⚡ Sectores Energéticos", className="mb-3", style={'color': COLORS['primary'], 'fontWeight': '600'}),
+                html.H6("⚡ Sectores Energéticos", className="mb-3", style={'color': '#3D3D3D', 'fontWeight': '600', 'fontSize': '0.95rem'}),
                 
                 # Acordeón de sectores
                 dbc.Accordion([
                     # GENERACIÓN
                     dbc.AccordionItem([
-                        # Sub-acordeón para Hidráulica
-                        dbc.Accordion([
-                            dbc.AccordionItem([
-                                dbc.NavLink([
-                                    html.I(className="fas fa-tint me-3", style={"color": "#03A9F4"}),
-                                    "Hidrología"
-                                ], href="/generacion/hidraulica/hidrologia", active="exact", className="nav-link-sidebar ms-3 mb-1")
-                            ], title="💧 Hidráulica", item_id="hidraulica-sub")
-                        ], start_collapsed=True, className="ms-2 mb-2"),
-                        
                         dbc.NavLink([
-                            html.I(className="fas fa-fire me-3", style={"color": "#E91E63"}),
-                            "Combustible fósil"
-                        ], href="/generacion/termica/fuente", active="exact", className="nav-link-sidebar ms-2 mb-1"),
+                            html.I(className="fas fa-tint me-3", style={"color": "#03A9F4"}),
+                            "Hidrología"
+                        ], href="/generacion/hidraulica/hidrologia", active="exact", className="nav-link-sidebar ms-2 mb-1"),
                         dbc.NavLink([
-                            html.I(className="fas fa-wind me-3", style={"color": "#4CAF50"}),
-                            "Eólica"
-                        ], href="/generacion/eolica/fuente", active="exact", className="nav-link-sidebar ms-2 mb-1"),
-                        dbc.NavLink([
-                            html.I(className="fas fa-leaf me-3", style={"color": "#8BC34A"}),
-                            "Biomasa"
-                        ], href="/generacion/biomasa/fuente", active="exact", className="nav-link-sidebar ms-2 mb-1"),
-                        dbc.NavLink([
-                            html.I(className="fas fa-sun me-3", style={"color": "#FFC107"}),
-                            "Solar"
-                        ], href="/generacion/solar/fuente", active="exact", className="nav-link-sidebar ms-2")
+                            html.I(className="fas fa-bolt me-3", style={"color": "#F59E0B"}),
+                            "Generación por Fuentes"
+                        ], href="/generacion/fuentes", active="exact", className="nav-link-sidebar ms-2")
                     ], title="⚡ Generación", item_id="generacion"),
                     
                     # TRANSMISIÓN
@@ -127,26 +108,10 @@ def crear_sidebar_universal():
                             "Subestaciones"
                         ], href="/transmision/subestaciones", active="exact", className="nav-link-sidebar ms-2 mb-1"),
                         dbc.NavLink([
-                            html.I(className="fas fa-tools me-3", style={"color": "#CDDC39"}),
+                            html.I(className="fas fa-tools me-3", style={"color": "#84CC16"}),
                             "Mantenimientos"
                         ], href="/transmision/mantenimientos", active="exact", className="nav-link-sidebar ms-2")
                     ], title="🏗️ Transmisión", item_id="transmision"),
-                    
-                    # DISTRIBUCIÓN
-                    dbc.AccordionItem([
-                        dbc.NavLink([
-                            html.I(className="fas fa-project-diagram me-3", style={"color": "#FF9800"}),
-                            "Redes Eléctricas"
-                        ], href="/distribucion/redes", active="exact", className="nav-link-sidebar ms-2 mb-1"),
-                        dbc.NavLink([
-                            html.I(className="fas fa-chart-line me-3", style={"color": "#FFC107"}),
-                            "Calidad del Servicio"
-                        ], href="/distribucion/calidad", active="exact", className="nav-link-sidebar ms-2 mb-1"),
-                        dbc.NavLink([
-                            html.I(className="fas fa-users me-3", style={"color": "#FFEB3B"}),
-                            "Usuarios"
-                        ], href="/distribucion/usuarios", active="exact", className="nav-link-sidebar ms-2")
-                    ], title="🔌 Distribución", item_id="distribucion"),
                     
                     # DEMANDA
                     dbc.AccordionItem([
@@ -194,14 +159,28 @@ def crear_sidebar_universal():
                             html.I(className="fas fa-exclamation-circle me-3", style={"color": "#D32F2F"}),
                             "Emergencias"
                         ], href="/restricciones/emergencias", active="exact", className="nav-link-sidebar ms-2")
-                    ], title="� Restricciones", item_id="restricciones")
+                    ], title="🚫 Restricciones", item_id="restricciones")
                     
-                ], id="accordion-sectores", className="mb-4", flush=True, always_open=False),
+                ], id="accordion-sectores", className="mb-3", flush=True, always_open=False),
+                
+                # DISTRIBUCIÓN - Enlace directo sin acordeón
+                dbc.NavLink([
+                    html.I(className="fas fa-project-diagram me-3", style={"color": "#8B5CF6"}),
+                    html.Span("🔌 Distribución", style={"fontWeight": "600"})
+                ], href="/distribucion", active="exact", className="nav-link-sidebar mb-2", 
+                   style={"backgroundColor": "rgba(139, 92, 246, 0.05)", "borderRadius": "8px", "padding": "10px 15px"}),
+                
+                # COMERCIALIZACIÓN - Enlace directo sin acordeón
+                dbc.NavLink([
+                    html.I(className="fas fa-dollar-sign me-3", style={"color": "#10B981"}),
+                    html.Span("💰 Comercialización", style={"fontWeight": "600"})
+                ], href="/comercializacion", active="exact", className="nav-link-sidebar mb-4", 
+                   style={"backgroundColor": "rgba(16, 185, 129, 0.05)", "borderRadius": "8px", "padding": "10px 15px"}),
                 
                 html.Hr(),
                 
                 # Información del sistema
-                html.H6("ℹ️ Estado del Sistema", className="mb-3", style={'color': COLORS['primary'], 'fontWeight': '600'}),
+                html.H6("ℹ️ Estado del Sistema", className="mb-3", style={'color': '#3D3D3D', 'fontWeight': '600', 'fontSize': '0.95rem'}),
                 
                 html.Div([
                     html.I(className="fas fa-circle me-2", style={"color": COLORS['success']}),
@@ -214,32 +193,32 @@ def crear_sidebar_universal():
                 ], className="mb-2"),
                 
                 html.Div([
-                    html.I(className="fas fa-clock me-2", style={"color": COLORS['warning']}),
-                    html.Span("Datos en Tiempo Real", style={"color": COLORS['warning'], "fontSize": "0.9rem"})
+                    html.I(className="fas fa-clock me-2", style={"color": COLORS['text_secondary']}),
+                    html.Span("Datos en Tiempo Real", style={"color": COLORS['text_secondary'], "fontSize": "0.9rem"})
                 ], className="mb-3"),
                 
                 html.Hr(),
                 
                 # Enlaces externos
-                html.H6("🔗 Enlaces Institucionales", className="mb-3", style={'color': COLORS['primary'], 'fontWeight': '600'}),
+                html.H6("🔗 Enlaces Institucionales", className="mb-3", style={'color': '#3D3D3D', 'fontWeight': '600', 'fontSize': '0.95rem'}),
                 
                 html.A([
                     html.I(className="fas fa-external-link-alt me-2"),
                     "Ministerio de Minas y Energía"
                 ], href="https://www.minenergia.gov.co/", target="_blank", 
-                  className="text-decoration-none d-block mb-2", style={"color": COLORS['secondary'], "fontSize": "0.9rem"}),
+                  className="text-decoration-none d-block mb-2", style={"color": "#60350E", "fontSize": "0.9rem"}),
                 
                 html.A([
                     html.I(className="fas fa-external-link-alt me-2"),
                     "XM S.A. E.S.P."
                 ], href="https://www.xm.com.co/", target="_blank", 
-                  className="text-decoration-none d-block mb-2", style={"color": COLORS['secondary'], "fontSize": "0.9rem"}),
+                  className="text-decoration-none d-block mb-2", style={"color": "#60350E", "fontSize": "0.9rem"}),
                 
                 html.A([
                     html.I(className="fas fa-external-link-alt me-2"),
                     "CREG"
                 ], href="https://www.creg.gov.co/", target="_blank", 
-                  className="text-decoration-none d-block", style={"color": COLORS['secondary'], "fontSize": "0.9rem"}),
+                  className="text-decoration-none d-block", style={"color": "#60350E", "fontSize": "0.9rem"}),
             ], style={
                 'padding': '20px',
                 'overflowY': 'auto',
@@ -260,9 +239,31 @@ def crear_sidebar_universal():
     ])
 
 
+def crear_header(titulo_pagina=None, descripcion_pagina=None, icono_pagina=None, informacion_adicional=None, color_tema=None):
+    """Crear un header minimalista y elegante específico para cada página"""
+    
+    # Si no se proporcionan datos, crear un header muy sutil o ninguno
+    if not titulo_pagina:
+        return html.Div()  # Header vacío para páginas que no lo necesiten
+    
+    # Asegurar que color_tema tenga un valor por defecto
+    if not color_tema:
+        color_tema = COLORS['primary']
     
     return html.Div([
+        # Header compacto y elegante con logo integrado
         html.Div([
+            # Logo del Ministerio en esquina superior derecha
+            html.Div([
+                html.Img(
+                    src="/assets/portada_Logo del ministerio.png",
+                    style={
+                        "width": "100px",
+                        "height": "auto"
+                    }
+                )
+            ], style={"position": "absolute", "top": "1rem", "right": "2rem", "zIndex": "10"}),
+            
             html.H1([
                 html.I(className=f"{icono_pagina} me-3", style={"color": color_tema}),
                 titulo_pagina
@@ -272,7 +273,7 @@ def crear_sidebar_universal():
                 descripcion_pagina
             ], className="hero-subtitle mb-3", style={"color": COLORS['text_secondary']}),
             html.P([
-                html.I(className="fas fa-building me-2", style={"color": COLORS['primary']}),
+                html.I(className="fas fa-building me-2", style={"color": "#8B5CF6"}),
                 "Ministerio de Minas y Energía - Colombia"
             ], style={
                 'fontSize': '1rem',
@@ -315,7 +316,8 @@ def crear_sidebar_universal():
             "boxShadow": f"0 2px 8px {COLORS['shadow_sm']}", 
             "padding": "2rem 2rem 1rem 2rem",
             "border": f"1px solid {COLORS['border']}",
-            "borderBottom": f"3px solid {color_tema}"
+            "borderBottom": f"3px solid {color_tema}",
+            "position": "relative"  # Para que el logo con position absolute se posicione correctamente
         })
     ], className="mb-4")
 
@@ -727,67 +729,7 @@ def crear_cards_metricas_principales(granjas_df, estadisticas_df):
     
     return cards
 
-# Callbacks para el sidebar
-from dash import Input, Output, State, callback
-
-@callback(
-    [Output("sidebar-content", "style"),
-     Output("sidebar-overlay", "style")],
-    [Input("sidebar-toggle", "n_clicks"),
-     Input("sidebar-close", "n_clicks"),
-     Input("sidebar-overlay", "n_clicks")],
-    [State("sidebar-content", "style"),
-     State("sidebar-overlay", "style")],
-    prevent_initial_call=True
-)
-def toggle_sidebar(toggle_clicks, close_clicks, overlay_clicks, sidebar_style, overlay_style):
-    """Controlar la apertura y cierre del sidebar"""
-    from dash import callback_context as ctx
-    
-    if not ctx.triggered:
-        return sidebar_style, overlay_style
-    
-    button_id = ctx.triggered[0]['prop_id'].split('.')[0]
-    
-    # Estilos base
-    sidebar_hidden = {
-        'position': 'fixed',
-        'top': '0',
-        'left': '-300px',
-        'width': '300px',
-        'height': '100vh',
-        'background': COLORS['bg_card'],
-        'borderRight': f'1px solid {COLORS["border"]}',
-        'boxShadow': '2px 0 10px rgba(0,0,0,0.1)',
-        'zIndex': '1040',
-        'transition': 'left 0.3s ease-in-out'
-    }
-    
-    sidebar_visible = sidebar_hidden.copy()
-    sidebar_visible['left'] = '0px'
-    
-    overlay_hidden = {
-        'position': 'fixed',
-        'top': '0',
-        'left': '0',
-        'width': '100vw',
-        'height': '100vh',
-        'background': 'rgba(0,0,0,0.3)',
-        'zIndex': '1030',
-        'display': 'none'
-    }
-    
-    overlay_visible = overlay_hidden.copy()
-    overlay_visible['display'] = 'block'
-    
-    if button_id == "sidebar-toggle":
-        # Abrir sidebar
-        return sidebar_visible, overlay_visible
-    elif button_id in ["sidebar-close", "sidebar-overlay"]:
-        # Cerrar sidebar
-        return sidebar_hidden, overlay_hidden
-    
-    return sidebar_style, overlay_style
+# Sidebar ahora usa JavaScript inline para funcionar sin callbacks de Dash
 
 def crear_header(titulo_pagina=None, descripcion_pagina=None, icono_pagina=None, informacion_adicional=None, color_tema=None):
     """Crear un header minimalista y elegante específico para cada página"""

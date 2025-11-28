@@ -105,21 +105,49 @@ METRICAS_CONFIG = {
             'metric': 'DemaCome',
             'entity': 'Sistema',
             'conversion': 'horas_a_diario',
-            'dias_history': 30,
-            'batch_size': 7
+            'dias_history': 1826,  # 5 años (igual que generación)
+            'batch_size': 30
         },
         {
             'metric': 'DemaCome',
             'entity': 'Agente',
-            'conversion': None,
-            'dias_history': 30,  # Aumentado de 7 a 30 días
-            'batch_size': 7
+            'conversion': 'horas_a_diario',  # Values_Hour* en kWh, sumar → GWh
+            'dias_history': 1826,  # 5 años (2020-2025) - ACTUALIZADO
+            'batch_size': 7  # 7 días por batch (muchos agentes)
         },
         {
             'metric': 'DemaReal',
             'entity': 'Agente',
-            'conversion': None,
-            'dias_history': 30,  # Aumentado de 7 a 30 días
+            'conversion': 'horas_a_diario',  # Values_Hour* en kWh, sumar → GWh
+            'dias_history': 1826,  # 5 años (2020-2025) - ACTUALIZADO
+            'batch_size': 7  # 7 días por batch (muchos agentes)
+        },
+        {
+            'metric': 'DemaRealReg',
+            'entity': 'Sistema',
+            'conversion': 'horas_a_diario',  # Values_Hour* en kWh, sumar → GWh
+            'dias_history': 1826,  # 5 años
+            'batch_size': 30
+        },
+        {
+            'metric': 'DemaRealReg',
+            'entity': 'Agente',
+            'conversion': 'horas_a_diario',  # Values_Hour* en kWh, sumar → GWh
+            'dias_history': 1826,  # 5 años
+            'batch_size': 7
+        },
+        {
+            'metric': 'DemaRealNoReg',
+            'entity': 'Sistema',
+            'conversion': 'horas_a_diario',  # Values_Hour* en kWh, sumar → GWh
+            'dias_history': 1826,  # 5 años
+            'batch_size': 30
+        },
+        {
+            'metric': 'DemaRealNoReg',
+            'entity': 'Agente',
+            'conversion': 'horas_a_diario',  # Values_Hour* en kWh, sumar → GWh
+            'dias_history': 1826,  # 5 años
             'batch_size': 7
         },
         {

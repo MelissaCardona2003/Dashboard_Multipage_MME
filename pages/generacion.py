@@ -7,15 +7,8 @@ import plotly.express as px
 # Imports locales para componentes uniformes
 from utils.components import crear_header, crear_sidebar_universal, crear_boton_regresar
 from utils.config import COLORS
-from utils._xm import get_objetoAPI, fetch_metric_data, obtener_datos_desde_sqlite
-from utils.cache_manager import cached_function
-
-# Importar pydataxm si está disponible
-try:
-    from pydataxm.pydataxm import ReadDB
-    PYDATAXM_AVAILABLE = True
-except ImportError:
-    PYDATAXM_AVAILABLE = False
+from utils.db_manager import get_metric_data  # Sistema ETL-SQLite (fallback)
+from utils._xm import fetch_metric_data  # API XM (prioridad para fichas)
 
 register_page(
     __name__,
@@ -65,94 +58,152 @@ def formatear_fecha_espanol(fecha_obj):
     
     return fecha_texto
 
+def obtener_datos_fichas_realtime(metrica, entidad, fecha_inicio, fecha_fin):
+    """
+    Obtener datos para fichas del tablero: PRIORIZA API XM en tiempo real.
+    
+    ESTRATEGIA PARA FICHAS (TIEMPO REAL):
+    1. Intentar API XM primero (datos actualizados hoy)
+    2. Si API falla/no disponible → SQLite como fallback
+    
+    Args:
+        metrica: Métrica XM (ej: 'VoluUtilDiarEner', 'Gene')
+        entidad: Entidad (ej: 'Embalse', 'Sistema')
+        fecha_inicio: Fecha inicio (str 'YYYY-MM-DD' o date)
+        fecha_fin: Fecha fin (str 'YYYY-MM-DD' o date)
+    
+    Returns:
+        DataFrame con datos (API XM o SQLite) o None
+    """
+    import logging
+    logger = logging.getLogger('generacion_dashboard')
+    
+    # Convertir fechas a string si es necesario
+    if isinstance(fecha_inicio, date):
+        fecha_inicio = fecha_inicio.strftime('%Y-%m-%d')
+    if isinstance(fecha_fin, date):
+        fecha_fin = fecha_fin.strftime('%Y-%m-%d')
+    
+    # PASO 1: Intentar API XM (tiempo real)
+    try:
+        logger.info(f"📡 [API XM] Consultando {metrica}/{entidad} desde {fecha_inicio} hasta {fecha_fin}")
+        df_api = fetch_metric_data(
+            metric=metrica,
+            entity=entidad,
+            start_date=fecha_inicio,
+            end_date=fecha_fin
+        )
+        
+        if df_api is not None and not df_api.empty:
+            # Convertir unidades: API XM devuelve TODAS las métricas en kWh
+            if 'Value' in df_api.columns:
+                # CONVERSIÓN UNIVERSAL (VERIFICADA CON PÁGINA XM):
+                # TODAS las métricas: kWh → GWh (÷ 1,000,000)
+                # 
+                # Ejemplos verificados:
+                # - VoluUtilDiarEner: 14,698,139,600 kWh = 14,698.14 GWh ✅
+                # - CapaUtilDiarEner: 17,125,050,057 kWh = 17,125.05 GWh ✅
+                # - AporEner: 240,600,115 kWh = 240.60 GWh/día ✅
+                # - AporEnerMediHist: 270,610,000 kWh = 270.61 GWh/día ✅
+                # - Gene: Similar conversión kWh → GWh
+                
+                df_api['valor_gwh'] = df_api['Value'] / 1_000_000  # kWh → GWh
+                logger.info(f"✅ [API XM] {len(df_api)} registros (kWh → GWh)")
+                
+                return df_api
+            else:
+                logger.warning(f"⚠️ [API XM] Datos sin columna 'Value'")
+    except Exception as e:
+        logger.warning(f"⚠️ [API XM] Error consultando {metrica}: {e}")
+    
+    # PASO 2: Fallback a SQLite
+    logger.info(f"💾 [SQLite Fallback] Consultando {metrica}/{entidad}")
+    df_sqlite = get_metric_data(metrica, entidad, fecha_inicio, fecha_fin)
+    
+    if df_sqlite is not None and not df_sqlite.empty:
+        logger.info(f"✅ [SQLite] {len(df_sqlite)} registros obtenidos (ya en GWh)")
+        return df_sqlite
+    else:
+        logger.error(f"❌ Sin datos disponibles para {metrica}/{entidad} (API y SQLite fallaron)")
+        return None
+
 def obtener_metricas_hidricas():
     """
-    Obtener métricas de reservas, aportes hídricos y generación total con cache.
+    Obtener métricas de reservas, aportes hídricos y generación total.
+    
+    NUEVA ARQUITECTURA PARA FICHAS (2025-11-24):
+    - API XM como fuente PRIMARIA (tiempo real, datos actualizados)
+    - SQLite como FALLBACK (si API no disponible)
+    - Conversión automática de unidades según fuente
     
     METODOLOGÍA OFICIAL XM:
-    1. Reservas Hídricas = (Volumen Útil Diario Energía / Capacidad Útil Energía) * 100
-    2. Aportes Hídricos = (Promedio mensual de Aportes Energía / Promedio mensual de Media Histórica) * 100
-    3. Generación SIN = Suma de generación diaria del sistema
+    1. Reservas Hídricas = (Volumen Útil / Capacidad Útil) * 100
+    2. Aportes Hídricos = (Promedio mensual Real / Promedio mensual Histórico) * 100
+    3. Generación SIN = Suma de generación diaria
     """
     try:
         fecha_fin = date.today() - timedelta(days=1)
+        reserva_pct, reserva_gwh, fecha_reserva = None, None, None
+        aporte_pct, aporte_gwh, fecha_aporte = None, None, None
+        gen_gwh, fecha_gen = None, None
         
         # === 1. RESERVAS HÍDRICAS ===
-        # Usar obtener_datos_desde_sqlite() para buscar última fecha disponible
-        reserva_pct, reserva_gwh, fecha_reserva = None, None, None
-        
-        df_vol, fecha_vol = obtener_datos_desde_sqlite('VoluUtilDiarEner', 'Embalse', fecha_fin)
-        df_cap, fecha_cap = obtener_datos_desde_sqlite('CapaUtilDiarEner', 'Embalse', fecha_fin)
-        
-        if df_vol is not None and df_cap is not None:
-            # Detectar nombre de columna de valor (puede ser 'Value' o 'Values_code')
-            col_value = 'Value' if 'Value' in df_vol.columns else 'Values_code' if 'Values_code' in df_vol.columns else None
+        # Buscar datos válidos (hasta 5 días atrás) - validar volumen > 10,000 GWh
+        for dias_atras in range(6):
+            fecha_busqueda = (fecha_fin - timedelta(days=dias_atras)).strftime('%Y-%m-%d')
             
-            if col_value:
-                # Precalentamiento ya convirtió a GWh (Wh ÷ 1e9)
-                # Solo leer y sumar
-                vol_total_gwh = df_vol[col_value].sum()
-                cap_total_gwh = df_cap[col_value].sum()
+            # Obtener volumen y capacidad desde API XM (primero) o SQLite (fallback)
+            df_vol = obtener_datos_fichas_realtime('VoluUtilDiarEner', 'Embalse', fecha_busqueda, fecha_busqueda)
+            df_cap = obtener_datos_fichas_realtime('CapaUtilDiarEner', 'Embalse', fecha_busqueda, fecha_busqueda)
+            
+            if df_vol is not None and not df_vol.empty and df_cap is not None and not df_cap.empty:
+                # Valores en GWh (ya convertidos por obtener_datos_fichas_realtime)
+                vol_total_gwh = df_vol['valor_gwh'].sum()
+                cap_total_gwh = df_cap['valor_gwh'].sum()
+                
+                # VALIDACIÓN: Rechazar datos con volumen < 10,000 GWh (incompletos)
+                if vol_total_gwh < 10000:
+                    print(f"⚠️ Datos incompletos {fecha_busqueda}: {vol_total_gwh:.2f} GWh (muy bajo)")
+                    continue
                 
                 if cap_total_gwh > 0:
                     reserva_pct = round((vol_total_gwh / cap_total_gwh) * 100, 2)
                     reserva_gwh = round(vol_total_gwh, 2)
-                    fecha_reserva = fecha_vol
-                    print(f"✅ Reservas: {reserva_pct}% ({reserva_gwh:.2f} GWh) - Fecha: {fecha_vol}")
+                    fecha_reserva = datetime.strptime(fecha_busqueda, '%Y-%m-%d').date()
+                    print(f"✅ Reservas: {reserva_pct}% ({reserva_gwh:,.2f} GWh) - {fecha_busqueda}{' (datos históricos)' if dias_atras > 0 else ''} [API XM ↔ SQLite]")
+                    break
         
         # === 2. APORTES HÍDRICOS ===
-        # Calcular promedio del mes actual hasta la fecha
-        aporte_pct, aporte_gwh, fecha_aporte = None, None, None
+        # Promedio del mes actual (día 1 hasta ayer)
+        fecha_inicio_mes = fecha_fin.replace(day=1).strftime('%Y-%m-%d')
+        fecha_fin_str = fecha_fin.strftime('%Y-%m-%d')
         
-        # Buscar última fecha disponible en SQLite
-        _, fecha_fin_aportes = obtener_datos_desde_sqlite('AporEner', 'Sistema', fecha_fin)
+        df_aportes = obtener_datos_fichas_realtime('AporEner', 'Sistema', fecha_inicio_mes, fecha_fin_str)
+        df_media = obtener_datos_fichas_realtime('AporEnerMediHist', 'Sistema', fecha_inicio_mes, fecha_fin_str)
         
-        if fecha_fin_aportes:
-            # Calcular promedio del mes actual (desde día 1 hasta última fecha disponible)
-            fecha_inicio_mes = fecha_fin_aportes.replace(day=1)
+        if df_aportes is not None and not df_aportes.empty and df_media is not None and not df_media.empty:
+            # Valores en GWh (ya convertidos por obtener_datos_fichas_realtime)
+            aportes_promedio = df_aportes['valor_gwh'].mean()
+            media_promedio = df_media['valor_gwh'].mean()
             
-            # Obtener todos los días del mes desde SQLite
-            from utils.db_manager import get_metric_data
-            fecha_inicio_str = fecha_inicio_mes.strftime('%Y-%m-%d')
-            fecha_fin_str = fecha_fin_aportes.strftime('%Y-%m-%d')
-            
-            df_aportes = get_metric_data('AporEner', 'Sistema', fecha_inicio_str, fecha_fin_str)
-            df_media_hist = get_metric_data('AporEnerMediHist', 'Sistema', fecha_inicio_str, fecha_fin_str)
-            
-            if df_aportes is not None and not df_aportes.empty and df_media_hist is not None and not df_media_hist.empty:
-                # SQLite ya tiene datos en GWh (conversión Wh→GWh hecha por ETL)
-                aportes_promedio = df_aportes['valor_gwh'].mean()
-                media_promedio = df_media_hist['valor_gwh'].mean()
-                
-                if media_promedio > 0:
-                    aporte_pct = round((aportes_promedio / media_promedio) * 100, 2)
-                    # Mostrar la Media Histórica en GWh (igual que XM)
-                    aporte_gwh = media_promedio
-                    fecha_aporte = fecha_fin_aportes
-                    print(f"✅ Aportes: {aporte_pct}% (Real: {aportes_promedio:.2f} GWh, Hist: {media_promedio:.2f} GWh) - Fecha: {fecha_fin_aportes.strftime('%Y-%m-%d')}")
-                else:
-                    print("⚠️ Media histórica = 0, no se puede calcular porcentaje de aportes")
-            else:
-                print(f"⚠️ No se encontraron datos de aportes para el mes {fecha_fin_aportes.strftime('%Y-%m')}")
-        else:
-            print("⚠️ No se encontró fecha disponible para aportes")
+            if media_promedio > 0:
+                aporte_pct = round((aportes_promedio / media_promedio) * 100, 2)
+                aporte_gwh = round(media_promedio, 2)  # Mostrar Media Histórica (como XM)
+                fecha_aporte = fecha_fin
+                print(f"✅ Aportes: {aporte_pct}% (Real: {aportes_promedio:.2f} GWh, Hist: {media_promedio:.2f} GWh) [API XM ↔ SQLite]")
         
         # === 3. GENERACIÓN SIN ===
-        # Usar obtener_datos_desde_sqlite() para buscar última fecha disponible
-        gen_gwh, fecha_gen = None, None
-        
-        df_generacion, fecha_gen = obtener_datos_desde_sqlite('Gene', 'Sistema', fecha_fin)
-        
-        if df_generacion is not None:
-            # Precalentamiento ya agregó Values_Hour* y convirtió kWh→GWh
-            # Solo leer columna Value
-            if 'Value' in df_generacion.columns:
-                gen_gwh = round(df_generacion['Value'].sum(), 2)
-                print(f"✅ Generación SIN: {gen_gwh:.2f} GWh - Fecha: {fecha_gen}")
-            else:
-                print(f"⚠️ No se encontró columna Value en Gene/Sistema")
-        else:
-            print("⚠️ No se pudo obtener la generación total del SIN")
+        # Buscar última fecha con datos
+        for dias_atras in range(6):
+            fecha_busqueda = (fecha_fin - timedelta(days=dias_atras)).strftime('%Y-%m-%d')
+            df_gen = obtener_datos_fichas_realtime('Gene', 'Sistema', fecha_busqueda, fecha_busqueda)
+            
+            if df_gen is not None and not df_gen.empty:
+                # Valor en GWh (ya convertido por obtener_datos_fichas_realtime)
+                gen_gwh = round(df_gen['valor_gwh'].iloc[0], 2)
+                fecha_gen = datetime.strptime(fecha_busqueda, '%Y-%m-%d').date()
+                print(f"✅ Generación SIN: {gen_gwh:.2f} GWh - {fecha_busqueda} [API XM ↔ SQLite]")
+                break
 
         
         return crear_fichas_hidricas_con_datos(

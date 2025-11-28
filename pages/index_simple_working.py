@@ -1,6 +1,7 @@
 import dash
 from dash import dcc, html, Input, Output, State, callback
 import dash_bootstrap_components as dbc
+from utils.components import crear_sidebar_universal
 
 # Metadata para Dash Pages (auto-discovery)
 dash.register_page(
@@ -11,15 +12,16 @@ dash.register_page(
     order=0
 )
 
-# Ajustes: Restricciones mucho más a la izquierda y más grande, Pérdidas más a la izquierda y más pequeño
+# Configuración de módulos con nuevos componentes PNG
+# POSICIONES ESTRATÉGICAS: Sin tapar ilustraciones isométricas
 MODULES = [
     {
         "id": "generacion", 
         "path": "/generacion", 
-        "image": "Recurso 1.png", 
-        "left": "13%", 
-        "top": "60%", 
-        "width": "23%", 
+        "image": "portada_Boton generacion.png", 
+        "left": "8%",    # Más alejado del centro, esquina izquierda
+        "top": "75%",    # Muy abajo
+        "width": "12.5%", 
         "title": "G — Generación", 
         "description": "Costo de producir/comprar la energía (contratos + bolsa). Es el componente más variable del CU.",
         "modal_description": "G refleja el precio promedio de la energía adquirida a generadores vía contratos bilaterales y bolsa del MEM (XM). Su dinámica depende de hidrología, combustibles y oferta/demanda; la CREG y XM reportan explícitamente la relación entre precios de bolsa/contratos y el componente G del CU.",
@@ -29,10 +31,10 @@ MODULES = [
     {
         "id": "transmision", 
         "path": "/transmision", 
-        "image": "Recurso 2.png", 
-        "left": "11.5%", 
-        "top": "30%", 
-        "width": "19%", 
+        "image": "portada_Boton transmision.png", 
+        "left": "5%",    # Mucho más a la izquierda
+        "top": "38%",    # Altura media-baja
+        "width": "12.9%",
         "title": "T — Transmisión", 
         "description": "Peaje del STN (líneas de alta tensión). Cargo regulado y relativamente estable en $/kWh.",
         "modal_description": "T remunera los activos del Sistema de Transmisión Nacional (STN) y su operación. La SSPD y la CREG describen que es un cargo por uso regulado que XM incorpora al CU.",
@@ -42,10 +44,10 @@ MODULES = [
     {
         "id": "distribucion", 
         "path": "/distribucion", 
-        "image": "Recurso 3.png", 
-        "left": "29.5%", 
-        "top": "2%", 
-        "width": "30%", 
+        "image": "portada_Boton distribucion.png", 
+        "left": "30%",   # Más a la izquierda, sin tapar edificios
+        "top": "5%",     # Muy arriba
+        "width": "13.1%",
         "title": "D — Distribución", 
         "description": "Peaje del SDL (redes locales: media/baja tensión). Cargo regulado por zona/nivel de tensión.",
         "modal_description": "D remunera redes locales (postes, transformadores, operación y expansión). La CREG define los cargos por uso del SDL y XM publica los cargos de distribución que alimentan el CU.",
@@ -53,12 +55,12 @@ MODULES = [
         "formula_description": "Cargo unitario de distribución aplicado al mercado/nivel de tensión."
     },
     {
-        "id": "metricas", 
-        "path": "/metricas", 
-        "image": "Recurso 4.png", 
-        "left": "61.5%", 
-        "top": "9%", 
-        "width": "24%", 
+        "id": "comercializacion", 
+        "path": "/comercializacion", 
+        "image": "portada_Boton comercializacion.png", 
+        "left": "73%",   # Más a la derecha, encima de la plataforma
+        "top": "8%",     # Arriba
+        "width": "12.5%", 
         "title": "Cv — Comercialización", 
         "description": "Costo variable por kWh de gestión comercial (medición, facturación, atención). Definido en la fórmula tarifaria.",
         "modal_description": "El costo de comercialización tiene parte fija (Cf) y variable (Cv). Para el CU, XM utiliza el término variable regulado por CREG (fórmula tarifaria vigente), aplicado en $/kWh sobre la energía del usuario.",
@@ -68,10 +70,10 @@ MODULES = [
     {
         "id": "restricciones", 
         "path": "/restricciones", 
-        "image": "Recurso 6.png", 
-        "left": "43.5%", 
-        "top": "55.5%", 
-        "width": "23%", 
+        "image": "portada_Boton restricciones.png", 
+        "left": "42%",   # Centrado horizontal
+        "top": "75%",    # Mucho más abajo, lejos del centro
+        "width": "12.5%", 
         "title": "R — Restricciones", 
         "description": "Costo por congestiones/limitaciones de red que obligan al CND (XM) a redespachar generación más cara localmente.",
         "modal_description": "Cuando la red se congestiona o hay condiciones operativas, el CND (XM) realiza redespacho y se incurre en costos de restricciones. XM publica que el costo unitario de restricciones es la razón entre el costo total de restricciones y la generación real del sistema en el periodo.",
@@ -81,10 +83,10 @@ MODULES = [
     {
         "id": "perdidas", 
         "path": "/perdidas", 
-        "image": "Recurso 5.png", 
-        "left": "63%", 
-        "top": "43.5%", 
-        "width": "16%", 
+        "image": "portada_Boton perdidas.png", 
+        "left": "78%",   # Ajustado más a la izquierda
+        "top": "60%",    # Altura media-baja
+        "width": "10.5%", # Más pequeño que los demás 
         "title": "PR — Pérdidas", 
         "description": "Energía adicional que se compra para cubrir pérdidas técnicas/no técnicas reconocidas por CREG. La metodología la aplica ASIC/XM.",
         "modal_description": "En redes hay pérdidas; la regulación reconoce un porcentaje (por mercado/nivel) que el ASIC (en XM) aplica para la liquidación. Esto se traduce en un cargo unitario en el CU asociado a comprar kWh extra para que al medidor llegue lo que el usuario consume.",
@@ -95,46 +97,110 @@ MODULES = [
 
 def layout():
     return html.Div([
-        # SVG de fondo
+        # Sidebar universal (z-index alto para estar sobre todo)
+        crear_sidebar_universal(),
+        
+        # CAPA 1: Fondo base adaptable (sin animación)
         html.Img(
-            src="/assets/portada.svg",
-            id="background-svg",
+            src="/assets/portada_fondo.png",
+            id="background-base",
             style={
                 "position": "fixed",
                 "top": "0",
                 "left": "0", 
                 "width": "100%",
                 "height": "100vh",
-                "objectFit": "contain",
+                "objectFit": "cover",
                 "zIndex": "1",
-                "pointerEvents": "none",
-                "transition": "filter 0.6s ease"
+                "pointerEvents": "none"
             }
         ),
         
-        # Módulos con flotación y sombras amarillas restauradas
+        # CAPA 2: Ilustración del sistema energético (CON flotación, SIN oscurecimiento)
+        html.Img(
+            src="/assets/portada_secciones.png",
+            id="background-sections",
+            className="floating-sections",
+            style={
+                "position": "fixed",
+                "top": "50%",
+                "left": "50%",
+                "transform": "translate(-50%, -50%)",
+                "width": "92.4%",  # 1774/1920 = 92.4%
+                "height": "93.8%", # 1013/1080 = 93.8%
+                "objectFit": "contain",
+                "zIndex": "2",
+                "pointerEvents": "none",
+                "animation": "gentle-float 4s ease-in-out infinite"
+            }
+        ),
+        
+        # CAPA 3: Título cerca del centro (junto al botón ℹ)
+        html.Img(
+            src="/assets/portada_titulo.png",
+            id="portada-titulo",
+            style={
+                "position": "fixed",
+                "top": "50%",
+                "left": "50%",
+                "transform": "translate(-50%, -50%)",
+                "width": "31.2%",  # 599/1920 = 31.2%
+                "height": "auto",
+                "zIndex": "5",
+                "pointerEvents": "none"
+            }
+        ),
+        
+        # Logo "La Energía de Nuestra Gente" (259x111) - Esquina inferior derecha
+        html.Img(
+            src="/assets/portada_Logo de las manos.png",
+            id="logo-manos",
+            style={
+                "position": "fixed",
+                "bottom": "2%",   # Abajo
+                "right": "2%",    # Derecha
+                "width": "13.5%",  # 259/1920 = 13.5%
+                "height": "auto",
+                "zIndex": "5",
+                "pointerEvents": "none"
+            }
+        ),
+        
+        # Logo del Ministerio (140x126)
+        html.Img(
+            src="/assets/portada_Logo del ministerio.png",
+            id="logo-ministerio",
+            style={
+                "position": "fixed",
+                "top": "2%",
+                "right": "2%",
+                "width": "7.3%",  # 140/1920 = 7.3%
+                "height": "auto",
+                "zIndex": "5",
+                "pointerEvents": "none"
+            }
+        ),
+        
+        # CAPA 4: Botones interactivos (SOLO hover + tooltip, SIN flotación)
         *[
             html.A([
                 html.Img(
                     src=f"/assets/{m['image']}",
-                    className="floating-module-safe",  # Nueva clase sin conflictos
+                    className="button-module",
                     style={
                         "width": "100%", 
                         "height": "auto", 
-                        "transition": "all 0.6s cubic-bezier(0.4, 0, 0.2, 1)",
-                        "border": "none !important",
-                        "outline": "none !important",
-                        "background": "transparent !important",
-                        "backgroundColor": "transparent !important",
-                        "boxShadow": "none !important",
-                        # Sombra amarilla sutil restaurada
-                        "filter": "drop-shadow(0 8px 20px rgba(255, 193, 7, 0.35)) drop-shadow(0 4px 10px rgba(255, 165, 0, 0.25))"
+                        "transition": "all 0.4s cubic-bezier(0.4, 0, 0.2, 1)",
+                        "border": "none",
+                        "outline": "none",
+                        "background": "transparent",
+                        "filter": "drop-shadow(0 4px 10px rgba(0, 0, 0, 0.3))"
                     }
                 )
             ],
             href=m["path"],
             id=f"module-{m['id']}",
-            className="custom-module floating-container",
+            className="custom-module",
             style={
                 "position": "absolute",
                 "left": m["left"],
@@ -142,17 +208,34 @@ def layout():
                 "width": m["width"],
                 "cursor": "pointer",
                 "textDecoration": "none",
-                "transition": "all 0.6s cubic-bezier(0.4, 0, 0.2, 1)",
+                "transition": "all 0.4s cubic-bezier(0.4, 0, 0.2, 1)",
                 "zIndex": "10",
-                "border": "none !important",
-                "outline": "none !important",
-                "background": "transparent !important",
-                "backgroundColor": "transparent !important",
-                "boxShadow": "none !important",
-                # Animación de flotación suave
-                "animation": "gentle-float 4s ease-in-out infinite"
+                "border": "none",
+                "outline": "none",
+                "background": "transparent"
             }
         ) for m in MODULES
+        ],
+        
+        # Overlays oscuros para cada viñeta (fondo opaco cuando aparece la viñeta)
+        *[
+            html.Div(
+                id=f"overlay-{m['id']}",
+                style={
+                    "position": "fixed",
+                    "top": "0",
+                    "left": "0",
+                    "width": "100%",
+                    "height": "100%",
+                    "backgroundColor": "rgba(0,0,0,0.7)",
+                    "opacity": "0",
+                    "visibility": "hidden",
+                    "zIndex": "199",  # Justo debajo de las viñetas (200)
+                    "backdropFilter": "blur(5px)",
+                    "pointerEvents": "none",
+                    "transition": "all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55)"
+                }
+            ) for m in MODULES
         ],
         
         # Viñetas centrales completas con toda la información detallada
@@ -263,27 +346,27 @@ def layout():
             }) for m in MODULES
         ],
         
-        # Botón de información para ecuación de costo unitario
+        # Botón ℹ al lado derecho de la letra R en "EnergÉtico"
         html.Div([
             html.Button(
-                "ℹ",  # Símbolo de información
+                "ℹ",
                 id="info-button",
                 style={
                     "position": "fixed",
-                    "top": "42%",  # Un poco más arriba
-                    "left": "54%",  # Más a la derecha para tapar el título
-                    "transform": "translate(-50%, -50%)",  # Centrado exacto
-                    "width": "60px",
-                    "height": "60px",
+                    "top": "41%",     # Mucho más arriba, a la altura de la R
+                    "left": "59%",    # Al lado de la R en "Energético"
+                    "transform": "translate(-50%, -50%)",
+                    "width": "50px",  # Más pequeño
+                    "height": "50px",
                     "borderRadius": "50%",
                     "backgroundColor": "#F2C330",
                     "color": "#2C3E50",
-                    "fontSize": "32px",
+                    "fontSize": "28px",  # Fuente más pequeña
                     "fontWeight": "bold",
-                    "border": "4px solid #2C3E50",
+                    "border": "3px solid #2C3E50",
                     "cursor": "pointer",
-                    "zIndex": "10",  # Más bajo que tooltips (100) y modales (1000)
-                    "boxShadow": "0 8px 20px rgba(0,0,0,0.5), 0 0 0 3px rgba(242,195,48,0.4)",
+                    "zIndex": "20",  # Por encima de botones (10) pero bajo tooltips (200)
+                    "boxShadow": "0 8px 24px rgba(0,0,0,0.5), 0 0 0 3px rgba(242,195,48,0.4)",
                     "transition": "all 0.3s ease",
                     "display": "flex",
                     "alignItems": "center",
@@ -425,7 +508,7 @@ def layout():
     ], id="page-background", style={
         "width": "100%",
         "height": "100vh", 
-        "overflow": "hidden",
+        "overflow": "visible",  # Cambiar a visible para que el sidebar se vea
         "background": "#FCF3D6",  # Color EXACTO del fondo del SVG extraído del archivo
         "transition": "background 0.6s ease"  # Transición para sincronizar con SVG
     })

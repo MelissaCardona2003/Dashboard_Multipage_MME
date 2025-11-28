@@ -1,3 +1,4 @@
+print("[DEBUG] Script incremental iniciado")
 #!/usr/bin/env python3
 """
 Actualización incremental del ETL - Solo datos nuevos desde última fecha en BD
@@ -164,7 +165,6 @@ def actualizar_metrica(api, metrica, entidad, nombre):
         return 0
 
 def main():
-    print("[DEBUG] INICIO main()")
     logger.info("\n" + "="*60)
     logger.info("⚡ ACTUALIZACIÓN INCREMENTAL - SOLO DATOS NUEVOS")
     logger.info("⚙️  Usando conversiones del ETL original:")
@@ -173,11 +173,11 @@ def main():
     logger.info("   • Horas → Diario: Sumar 24 horas")
     logger.info("="*60)
     logger.info(f"Inicio: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-
-    print("[DEBUG] Antes de get_objetoAPI()")
+    
     api = get_objetoAPI()
-    print("[DEBUG] Después de get_objetoAPI()")
-
+    
+    # Métricas críticas para las fichas del dashboard
+    # Conversiones deben coincidir con etl/config_metricas.py
     metricas = [
         ('VoluUtilDiarEner', 'Embalse', 'Volumen Útil Diario (kWh→GWh)'),
         ('CapaUtilDiarEner', 'Embalse', 'Capacidad Útil Diario (kWh→GWh)'),
@@ -186,14 +186,12 @@ def main():
         ('Gene', 'Sistema', 'Generación Sistema (24h→GWh)'),
         ('DemaCome', 'Sistema', 'Demanda Comercial (24h→GWh)'),
     ]
-
+    
     total_registros = 0
     for metrica, entidad, nombre in metricas:
-        print(f"[DEBUG] Actualizando {metrica} / {entidad}")
         registros = actualizar_metrica(api, metrica, entidad, nombre)
-        print(f"[DEBUG] Registros actualizados para {metrica}: {registros}")
         total_registros += registros
-
+    
     logger.info("\n" + "="*60)
     logger.info(f"✅ ACTUALIZACIÓN COMPLETADA")
     logger.info(f"Total registros actualizados: {total_registros}")

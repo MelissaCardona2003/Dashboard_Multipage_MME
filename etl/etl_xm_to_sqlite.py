@@ -192,7 +192,7 @@ def poblar_catalogo(obj_api, catalogo_name: str) -> int:
         return 0
 
 
-def poblar_metrica(obj_api, config, usar_timeout=True, timeout_seconds=60):
+def poblar_metrica(obj_api, config, usar_timeout=True, timeout_seconds=60, fecha_inicio_custom=None, fecha_fin_custom=None):
     """
     Consulta API XM y popula SQLite para una métrica
     
@@ -200,6 +200,8 @@ def poblar_metrica(obj_api, config, usar_timeout=True, timeout_seconds=60):
         obj_api: Objeto ReadDB de pydataxm
         config: Configuración de la métrica
         usar_timeout: Si False, espera indefinidamente
+        fecha_inicio_custom: Fecha inicio personalizada (str YYYY-MM-DD)
+        fecha_fin_custom: Fecha fin personalizada (str YYYY-MM-DD)
         timeout_seconds: Timeout en segundos
     
     Returns:
@@ -211,10 +213,20 @@ def poblar_metrica(obj_api, config, usar_timeout=True, timeout_seconds=60):
     dias_history = config.get('dias_history', 7)
     batch_size = config.get('batch_size', dias_history)
     
-    fecha_fin = datetime.now().date() - timedelta(days=1)
-    fecha_inicio = fecha_fin - timedelta(days=dias_history)
+    # Usar fechas personalizadas o calcular automáticamente
+    if fecha_inicio_custom:
+        fecha_inicio = datetime.strptime(fecha_inicio_custom, '%Y-%m-%d').date()
+    else:
+        fecha_fin_auto = datetime.now().date() - timedelta(days=1)
+        fecha_inicio = fecha_fin_auto - timedelta(days=dias_history)
     
-    logging.info(f"📡 {metric}/{entity} - Rango: {fecha_inicio} a {fecha_fin} ({dias_history} días)")
+    if fecha_fin_custom:
+        fecha_fin = datetime.strptime(fecha_fin_custom, '%Y-%m-%d').date()
+    else:
+        fecha_fin = datetime.now().date() - timedelta(days=1)
+    
+    dias_totales = (fecha_fin - fecha_inicio).days + 1
+    logging.info(f"📡 {metric}/{entity} - Rango: {fecha_inicio} a {fecha_fin} ({dias_totales} días)")
     
     total_insertados = 0
     
@@ -275,7 +287,11 @@ def poblar_metrica(obj_api, config, usar_timeout=True, timeout_seconds=60):
         
         # Convertir unidades
         if conversion:
+            logging.info(f"  🔄 Aplicando conversión: {conversion}")
             df = convertir_unidades(df, metric, conversion)
+            if df is None or df.empty:
+                logging.error(f"❌ {metric}/{entity}: Conversión falló (DataFrame vacío)")
+                return 0
         
         # Preparar datos para inserción
         metrics_to_insert = []
@@ -283,11 +299,26 @@ def poblar_metrica(obj_api, config, usar_timeout=True, timeout_seconds=60):
         # Detectar columnas necesarias
         if 'Date' not in df.columns:
             logging.error(f"❌ {metric}/{entity}: Falta columna 'Date'")
+            logging.error(f"   Columnas disponibles: {list(df.columns)}")
             return 0
         
         if 'Value' not in df.columns:
             logging.error(f"❌ {metric}/{entity}: Falta columna 'Value'")
+            logging.error(f"   Columnas disponibles: {list(df.columns)}")
+            logging.error(f"   Conversión aplicada: {conversion}")
             return 0
+        
+        # OPTIMIZACIÓN: Cargar catálogo de Embalses UNA VEZ si es necesario
+        nombre_a_codigo_embalses = None
+        if entity == 'Embalse':
+            catalogos_nombres = db_manager.get_catalogo('ListadoEmbalses')
+            if catalogos_nombres is not None and len(catalogos_nombres) > 0:
+                # FIX: get_catalogo devuelve DataFrame, convertir a lista de diccionarios
+                nombre_a_codigo_embalses = {
+                    str(item['nombre']).strip().upper(): str(item['codigo']).strip() 
+                    for item in catalogos_nombres.to_dict('records')
+                }
+                logging.info(f"📖 Catálogo de Embalses cargado: {len(nombre_a_codigo_embalses)} embalses")
         
         # Iterar sobre filas
         for _, row in df.iterrows():
@@ -300,13 +331,18 @@ def poblar_metrica(obj_api, config, usar_timeout=True, timeout_seconds=60):
                 logging.warning(f"⚠️  {metric}/{entity} ({fecha}): Valor {valor_gwh:.2f} GWh muy bajo, RECHAZADO (posible dato incompleto de API XM)")
                 continue  # Saltar este registro
             
+            # VALIDACIÓN: Para DemaCome/DemaReal por Agente, rechazar valores muy bajos (probablemente errores)
+            if metric in ['DemaCome', 'DemaReal'] and entity == 'Agente' and valor_gwh < 0.001:
+                continue  # Saltar valores casi cero
+            
             # Detectar recurso (columnas según tipo de métrica)
-            # Name: AporEner/Rio, DemaCome/Agente
-            # Values_code: Gene/Recurso, Gene/Sistema (código del recurso)
+            # Para DemaCome/DemaReal por Agente, el código está en 'Values_code'
+            # Name: AporEner/Rio
+            # Values_code: Gene/Recurso, DemaCome/Agente, DemaReal/Agente
             # Resources, Embalse, Rio, Agente: otros casos legacy
             # Id: Para algunas métricas como Gene/Sistema, AporEner/Sistema
             recurso = None
-            for col_name in ['Name', 'Values_code', 'Id', 'Resources', 'Embalse', 'Rio', 'Agente']:
+            for col_name in ['Values_code', 'Name', 'Id', 'Resources', 'Embalse', 'Rio', 'Agente']:
                 if col_name in df.columns:
                     recurso = row.get(col_name)
                     if pd.notna(recurso):
@@ -318,33 +354,26 @@ def poblar_metrica(obj_api, config, usar_timeout=True, timeout_seconds=60):
             
             # FIX MAPEO EMBALSES: API devuelve nombres completos, necesitamos códigos
             # Para Embalse, buscar código en catálogo usando mapeo inverso nombre→código
-            if entity == 'Embalse' and recurso is not None:
-                # Obtener mapeo nombre→código desde catálogo
-                catalogos_nombres = db_manager.get_catalogo('ListadoEmbalses')
-                if catalogos_nombres is not None and len(catalogos_nombres) > 0:
-                    # Crear diccionario {nombre: codigo}
-                    nombre_a_codigo = {str(item['nombre']).strip().upper(): str(item['codigo']).strip() 
-                                       for item in catalogos_nombres}
+            if entity == 'Embalse' and recurso is not None and nombre_a_codigo_embalses:
+                # Buscar código por nombre (case-insensitive, stripped)
+                recurso_upper = str(recurso).strip().upper()
+                if recurso_upper in nombre_a_codigo_embalses:
+                    codigo_embalse = nombre_a_codigo_embalses[recurso_upper]
+                    logging.debug(f"🔄 Embalse mapeado: {recurso} → {codigo_embalse}")
+                    recurso = codigo_embalse
+                else:
+                    # Si no se encuentra, intentar match parcial
+                    encontrado = False
+                    for nombre_cat, codigo_cat in nombre_a_codigo_embalses.items():
+                        if recurso_upper in nombre_cat or nombre_cat in recurso_upper:
+                            logging.info(f"🔄 Embalse match parcial: {recurso} → {codigo_cat}")
+                            recurso = codigo_cat
+                            encontrado = True
+                            break
                     
-                    # Buscar código por nombre (case-insensitive, stripped)
-                    recurso_upper = str(recurso).strip().upper()
-                    if recurso_upper in nombre_a_codigo:
-                        codigo_embalse = nombre_a_codigo[recurso_upper]
-                        logging.debug(f"🔄 Embalse mapeado: {recurso} → {codigo_embalse}")
-                        recurso = codigo_embalse
-                    else:
-                        # Si no se encuentra, intentar match parcial
-                        encontrado = False
-                        for nombre_cat, codigo_cat in nombre_a_codigo.items():
-                            if recurso_upper in nombre_cat or nombre_cat in recurso_upper:
-                                logging.info(f"🔄 Embalse match parcial: {recurso} → {codigo_cat}")
-                                recurso = codigo_cat
-                                encontrado = True
-                                break
-                        
-                        if not encontrado:
-                            logging.warning(f"⚠️  Embalse sin mapeo: '{recurso}' no encontrado en catálogo")
-                            # Mantener el nombre original si no se encuentra código
+                    if not encontrado:
+                        logging.warning(f"⚠️  Embalse sin mapeo: '{recurso}' no encontrado en catálogo")
+                        # Mantener el nombre original si no se encuentra código
             
             # FIX DUPLICADOS: Para entidad=Sistema, si recurso=None, usar placeholder
             # Esto evita que SQLite inserte múltiples NULL (no los considera iguales en UNIQUE)
@@ -365,19 +394,78 @@ def poblar_metrica(obj_api, config, usar_timeout=True, timeout_seconds=60):
             total_insertados = db_manager.upsert_metrics_bulk(metrics_to_insert)
             logging.info(f"✅ {metric}/{entity}: {total_insertados} registros guardados en SQLite")
         
+        # =========================================================================
+        # GUARDAR DATOS HORARIOS (si existen columnas Values_Hour01-24)
+        # =========================================================================
+        hour_cols = [col for col in df.columns if 'Hour' in col and col.startswith('Values_Hour')]
+        
+        if hour_cols and len(hour_cols) == 24:
+            logging.info(f"  💾 Guardando datos horarios para {metric}/{entity}...")
+            
+            hourly_data = []
+            
+            for _, row in df.iterrows():
+                fecha = str(row['Date'])[:10]
+                
+                # Obtener código de recurso/agente
+                recurso = None
+                for col_name in ['Values_code', 'Name', 'Id', 'Resources', 'Embalse', 'Rio', 'Agente']:
+                    if col_name in df.columns:
+                        recurso = row.get(col_name)
+                        if pd.notna(recurso):
+                            recurso = str(recurso)
+                            if recurso.strip().lower() == 'sistema':
+                                recurso = '_SISTEMA_'
+                        break
+                
+                # FIX: Para Sistema, usar placeholder
+                if entity == 'Sistema' and recurso is None:
+                    recurso = '_SISTEMA_'
+                
+                # Extraer valores horarios
+                for h in range(1, 25):
+                    col_name = f'Values_Hour{h:02d}'
+                    if col_name in df.columns:
+                        valor_kwh = row.get(col_name)
+                        if pd.notna(valor_kwh) and valor_kwh > 0:
+                            valor_mwh = float(valor_kwh) / 1000  # kWh → MWh
+                            
+                            # Validación: rechazar valores muy bajos en métricas de demanda por agente
+                            if metric in ['DemaCome', 'DemaReal'] and entity == 'Agente' and valor_mwh < 0.001:
+                                continue
+                            
+                            hourly_data.append((
+                                fecha,
+                                metric,
+                                entity,
+                                recurso,
+                                h,
+                                valor_mwh
+                            ))
+            
+            # Insertar datos horarios en bulk
+            if hourly_data:
+                registros_horarios = db_manager.upsert_hourly_metrics_bulk(hourly_data)
+                logging.info(f"  ✅ Datos horarios: {registros_horarios} registros guardados ({len(hourly_data)//24} días × 24 horas)")
+        
         return total_insertados
         
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
         logging.error(f"❌ Error poblando {metric}/{entity}: {e}")
+        logging.error(f"Detalles del error:\n{error_details}")
         return 0
 
 
-def ejecutar_etl(usar_timeout=True):
+def ejecutar_etl(usar_timeout=True, fecha_inicio_custom=None, fecha_fin_custom=None):
     """
     Ejecuta ETL completo: consulta API XM y popula SQLite
     
     Args:
         usar_timeout: Si False, espera indefinidamente en API lenta
+        fecha_inicio_custom: Fecha inicio personalizada (YYYY-MM-DD)
+        fecha_fin_custom: Fecha fin personalizada (YYYY-MM-DD)
     
     Returns:
         Diccionario con estadísticas de ejecución
@@ -388,6 +476,9 @@ def ejecutar_etl(usar_timeout=True):
     logging.info("║       ETL: Portal Energético MME (XM API → SQLite)          ║")
     logging.info("╚══════════════════════════════════════════════════════════════╝")
     logging.info(f"Inicio: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    if fecha_inicio_custom or fecha_fin_custom:
+        logging.info(f"🎯 Modo personalizado: {fecha_inicio_custom or 'auto'} → {fecha_fin_custom or 'auto'}")
     
     # Inicializar API XM
     try:
@@ -454,7 +545,13 @@ def ejecutar_etl(usar_timeout=True):
             entity = config['entity']
             
             try:
-                registros = poblar_metrica(obj_api, config, usar_timeout)
+                registros = poblar_metrica(
+                    obj_api, 
+                    config, 
+                    usar_timeout,
+                    fecha_inicio_custom=fecha_inicio_custom,
+                    fecha_fin_custom=fecha_fin_custom
+                )
                 
                 if registros > 0:
                     stats['metricas_exitosas'] += 1
@@ -501,10 +598,24 @@ if __name__ == "__main__":
         action='store_true',
         help='Desactiva timeout (espera indefinida en API lenta)'
     )
+    parser.add_argument(
+        '--fecha-inicio',
+        type=str,
+        help='Fecha inicio (YYYY-MM-DD). Por defecto: según dias_history'
+    )
+    parser.add_argument(
+        '--fecha-fin',
+        type=str,
+        help='Fecha fin (YYYY-MM-DD). Por defecto: ayer'
+    )
     args = parser.parse_args()
     
     # Ejecutar ETL
-    resultado = ejecutar_etl(usar_timeout=not args.sin_timeout)
+    resultado = ejecutar_etl(
+        usar_timeout=not args.sin_timeout,
+        fecha_inicio_custom=args.fecha_inicio,
+        fecha_fin_custom=args.fecha_fin
+    )
     
     # Exit code
     sys.exit(0 if resultado.get('exito', False) else 1)

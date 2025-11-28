@@ -77,20 +77,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log(`🎯 HOVER IN en módulo: ${moduleId}`);
                 e.preventDefault();
                 
-                // Test 1: Cambiar color de fondo del módulo (test básico)
-                container.style.backgroundColor = 'rgba(255, 0, 0, 0.3)';
-                console.log('🔴 Test: Fondo rojo aplicado');
+                // Buscar el overlay correspondiente
+                const overlay = document.getElementById('overlay-' + moduleId);
                 
-                // Test 2: Oscurecer SVG de fondo
-                if (svgBackground) {
-                    svgBackground.style.filter = 'brightness(0.2) saturate(0.3)';
-                    svgBackground.style.transition = 'all 0.4s ease';
-                    console.log('🌑 SVG oscurecido');
-                } else {
-                    console.warn('⚠️ SVG no encontrado para oscurecer');
+                // Mostrar overlay oscuro con blur
+                if (overlay) {
+                    overlay.style.opacity = '1';
+                    overlay.style.visibility = 'visible';
+                    console.log('🌑 Overlay oscuro mostrado');
                 }
                 
-                // Test 3: Oscurecer otros módulos
+                // Oscurecer otros módulos
                 modulesToUse.forEach(function(otherContainer) {
                     if (otherContainer !== container) {
                         otherContainer.style.filter = 'brightness(0.3)';
@@ -100,14 +97,14 @@ document.addEventListener('DOMContentLoaded', function() {
                 });
                 console.log('🌑 Otros módulos oscurecidos');
                 
-                // Test 4: Iluminar módulo actual
+                // Iluminar módulo actual (brillo + sombra amarilla)
                 container.style.filter = 'brightness(1.5) saturate(1.5) drop-shadow(0 0 30px rgba(255, 193, 7, 0.8))';
                 container.style.transform = 'scale(1.1)';
                 container.style.zIndex = '50';
                 container.style.transition = 'all 0.4s ease';
                 console.log('✨ Módulo actual iluminado');
                 
-                // Test 5: Mostrar tooltip
+                // Mostrar tooltip
                 if (tooltip) {
                     tooltip.style.opacity = '1';
                     tooltip.style.visibility = 'visible';
@@ -124,22 +121,26 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.log(`🎯 HOVER OUT en módulo: ${moduleId}`);
                 e.preventDefault();
                 
-                // Restaurar todo
-                container.style.backgroundColor = '';
+                // Buscar el overlay correspondiente
+                const overlay = document.getElementById('overlay-' + moduleId);
                 
-                if (svgBackground) {
-                    svgBackground.style.filter = 'none';
-                    svgBackground.style.transition = 'all 0.4s ease';
+                // Ocultar overlay oscuro
+                if (overlay) {
+                    overlay.style.opacity = '0';
+                    overlay.style.visibility = 'hidden';
+                    console.log('🌕 Overlay oscuro oculto');
                 }
                 
+                // Restaurar todos los módulos (NO tocar portada_secciones.png)
                 modulesToUse.forEach(function(otherContainer) {
-                    otherContainer.style.filter = 'none';
+                    otherContainer.style.filter = 'drop-shadow(0 4px 10px rgba(0, 0, 0, 0.3))';
                     otherContainer.style.opacity = '1';
                     otherContainer.style.transform = 'scale(1)';
                     otherContainer.style.zIndex = '10';
                     otherContainer.style.transition = 'all 0.4s ease';
                 });
                 
+                // Ocultar tooltip
                 if (tooltip) {
                     tooltip.style.opacity = '0';
                     tooltip.style.visibility = 'hidden';
