@@ -719,6 +719,67 @@ Estos archivos son recursos técnicos para desarrolladores y personal de manteni
 
 ---
 
+## ⚠️ LIMITACIONES CONOCIDAS Y LECCIONES APRENDIDAS
+
+### **Limitaciones de la API XM**
+
+El dashboard obtiene datos de la API oficial de XM (pydataxm), pero esta tiene algunas limitaciones conocidas:
+
+1. **Datos históricos incompletos**: Algunos días específicos no tienen datos disponibles en la API (ej: agosto 2022 tiene 7 días sin datos de demanda comercial). Esto no es un error del dashboard, sino limitación de la fuente de datos.
+
+2. **Latencia de publicación**: Los datos del día actual pueden no estar disponibles inmediatamente. La API XM típicamente publica datos con 1-2 horas de retraso.
+
+3. **Métricas horarias vs. diarias**: Algunas métricas (Gene, DemaCome) vienen en formato horario (24 columnas Hour01-Hour24) y deben ser sumadas para obtener el total diario.
+
+### **Lecciones Técnicas Importantes**
+
+#### **1. Conversiones de Unidades - CRÍTICO**
+El error más común y costoso fue confundir factores de conversión:
+- ❌ **Error**: Dividir por 1e9 pensando que API retorna Wh
+- ✅ **Correcto**: API XM retorna kWh para la mayoría de métricas, dividir por 1e6 para obtener GWh
+- **Impacto**: Error de 1000x en valores mostrados (0.15 en lugar de 14,690 GWh)
+- **Solución**: Conversiones centralizadas en ETL, valores en BD ya están en GWh, dashboard solo lee
+
+#### **2. Sistema de Caché vs SQLite**
+El sistema original usaba archivos JSON en caché, lo cual causaba:
+- Problemas de sincronización entre workers de Gunicorn
+- Lentitud al cargar datos (lectura de disco en cada request)
+- Pérdida de datos por corrupción de archivos
+- **Solución**: Migración a SQLite con índices optimizados → 10x más rápido
+
+#### **3. Duplicados en Base de Datos**
+La actualización incremental puede crear duplicados si no se maneja correctamente:
+- **Problema**: Misma fecha insertada múltiples veces por diferentes ejecuciones
+- **Solución**: Script de auto-corrección semanal + validación de duplicados en health check
+- **Prevención**: ETL usa INSERT OR REPLACE en SQLite
+
+#### **4. Validación de Rangos**
+Los datos de XM a veces contienen valores anómalos:
+- Fechas futuras (por errores de sistema)
+- Valores negativos en métricas que solo pueden ser positivas
+- Valores extremos fuera de rangos físicamente posibles
+- **Solución**: Validador automático post-ETL con rangos esperados por métrica
+
+### **Buenas Prácticas Implementadas**
+
+✅ **Actualización incremental**: Solo trae datos nuevos (últimos 7 días) cada 6 horas → ahorra tiempo y recursos  
+✅ **ETL completo semanal**: Respaldo completo que recarga 5 años → garantiza consistencia  
+✅ **Validación post-actualización**: Detecta anomalías automáticamente → previene errores en dashboard  
+✅ **Auto-corrección programada**: Limpia duplicados y errores sin intervención manual  
+✅ **Valores pre-convertidos**: BD almacena todo en GWh → elimina conversiones en dashboard  
+✅ **Índices optimizados**: Consultas 100x más rápidas con índices en columnas correctas  
+✅ **Health check continuo**: Endpoint /health monitorea frescura y calidad de datos  
+✅ **Logs detallados**: Cada ejecución genera log con estadísticas → facilita debugging  
+
+### **Recursos Adicionales**
+
+Para más detalles técnicos sobre la arquitectura, consultar:
+- **ARQUITECTURA_ETL_SQLITE.md**: Documentación completa del sistema ETL-SQLite
+- **LIMPIEZA_PROYECTO_20251206.md**: Historial de limpieza y archivos eliminados
+- **legacy/README.md**: Explicación del sistema antiguo de caché (obsoleto)
+
+---
+
 ## 🤝 CONTRIBUCIÓN
 
 Las contribuciones son bienvenidas. Por favor:
