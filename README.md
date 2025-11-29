@@ -633,6 +633,92 @@ valor_gwh = valor / 1e9  # NUNCA usar 1e9, siempre 1e6
 
 ---
 
+## 🗂️ GUÍA DEL PROYECTO - Explicación de Archivos y Carpetas
+
+Esta sección explica en formato narrativo el propósito y función de cada archivo y carpeta del proyecto, para que sea comprensible para todo público.
+
+### 📁 Carpetas Principales
+
+#### **etl/** - Sistema de Extracción, Transformación y Carga de Datos
+Esta carpeta contiene los archivos responsables de obtener datos desde la API de XM (la entidad que administra el mercado eléctrico en Colombia) y guardarlos en nuestra base de datos local. Es como tener un robot que cada semana va al portal de XM, descarga los datos de los últimos 5 años, los organiza y los guarda en un formato que nuestro dashboard puede leer rápidamente. Tiene tres archivos esenciales: el script principal que hace la descarga (`etl_xm_to_sqlite.py`), la configuración que dice qué métricas descargar (`config_metricas.py`), y un validador que verifica que los datos descargados sean correctos (`validaciones.py`).
+
+#### **scripts/** - Programas de Mantenimiento Automático
+Aquí viven los scripts que mantienen el sistema funcionando sin intervención humana. Estos programas se ejecutan automáticamente en horarios programados: uno actualiza los datos cada 6 horas trayendo solo lo nuevo (`actualizar_incremental.py`), otro valida que la información descargada tenga sentido (`validar_etl.py`), otro limpia duplicados y errores una vez por semana (`autocorreccion.py`), y hay scripts auxiliares que facilitan el proceso de validación y despliegue (`validar_post_etl.sh`, `validate_deployment.sh`, `validar_sistema_completo.py`, `checklist_commit.sh`). Es como tener un equipo de mantenimiento que revisa y limpia el sistema automáticamente.
+
+#### **pages/** - Páginas del Dashboard
+Esta carpeta contiene los tres módulos visuales activos del dashboard. Cada archivo genera una página web diferente con gráficos interactivos: la página principal (`index_simple_working.py`) que da la bienvenida y muestra el resumen general, la página de generación eléctrica (`generacion_fuentes_unificado.py`) que muestra cuánta energía produce el país por cada fuente (agua, sol, viento, carbón, etc.), y la página de comercialización (`comercializacion.py`) que presenta datos sobre la demanda de energía y cómo se distribuye entre diferentes agentes del mercado. Piense en cada archivo como el plano de una habitación diferente en una casa virtual que los usuarios pueden visitar.
+
+#### **utils/** - Herramientas y Utilidades del Sistema
+Esta carpeta agrupa todas las funciones auxiliares que el resto del sistema necesita. Es como la caja de herramientas del proyecto. Aquí encontramos: el conector a la API de XM (`_xm.py`), el administrador de la base de datos SQLite (`db_manager.py`), el sistema de salud que verifica si todo funciona bien (`health_check.py`), el registrador de eventos (`logger.py`), los componentes visuales reutilizables como gráficos y tablas (`components.py`), archivos de configuración (`config.py`, `performance_config.py`), datos geográficos de Colombia en formato GeoJSON (`departamentos_colombia.geojson`, `regiones_colombia.geojson`, `regiones_naturales_colombia.json`), coordenadas de embalses (`embalses_coordenadas.py`), y otros módulos especializados como validadores de unidades y excepciones personalizadas.
+
+#### **assets/** - Recursos Visuales (Estilos e Imágenes)
+Contiene todos los archivos que definen cómo se ve el dashboard: hojas de estilo CSS que controlan colores, tamaños y animaciones, y la subcarpeta `images/` con logos e imágenes. Es equivalente al departamento de diseño gráfico del proyecto.
+
+#### **componentes/** - Componentes de Interfaz Reutilizables
+Almacena elementos de interfaz que se repiten en múltiples páginas, como el menú lateral de navegación y el pie de página. En lugar de copiar el mismo código en cada página, lo definimos una vez aquí y lo reutilizamos.
+
+#### **logs/** - Registros del Sistema
+Carpeta donde se guardan todos los archivos de log que documentan qué ha hecho el sistema: cuándo se actualizaron los datos, si hubo errores, resultados de validaciones, etc. Es como el diario del proyecto.
+
+#### **tests/** - Pruebas Automatizadas
+Contiene scripts que verifican que el código funciona correctamente. Son como exámenes que el sistema se hace a sí mismo para asegurar que todo está bien antes de entrar en producción.
+
+#### **legacy/** - Código Antiguo (No Usar)
+Almacena versiones anteriores del sistema que ya no se usan pero se conservan como referencia histórica. Es como el archivo de versiones obsoletas.
+
+#### **sql/** - Scripts de Base de Datos
+Contiene el esquema de la base de datos SQLite, es decir, la estructura que define cómo se organizan las tablas y los datos.
+
+### 📄 Archivos en la Raíz del Proyecto
+
+#### **app.py** - Servidor Principal del Dashboard
+Este es el corazón del dashboard. Es el archivo que arranca la aplicación web, define las rutas de las páginas, configura el servidor Gunicorn con 4 trabajadores para atender múltiples usuarios simultáneamente, y registra las páginas del dashboard. Cuando el sistema se inicia como servicio, es este archivo el que se ejecuta. Piense en él como el director de orquesta que coordina todas las demás partes del sistema.
+
+#### **gunicorn_config.py** - Configuración del Servidor Web
+Define cómo debe comportarse el servidor Gunicorn que corre el dashboard: cuántos trabajadores usar (4), en qué puerto escuchar (8050), tiempos de espera, y configuraciones de logging. Es como el manual de operación del servidor.
+
+#### **dashboard-mme.service** - Servicio del Sistema Operativo
+Archivo de configuración para systemd (el administrador de servicios de Linux) que le dice al sistema operativo cómo arrancar, detener y reiniciar el dashboard automáticamente. Gracias a este archivo, el dashboard se inicia solo cuando el servidor arranca y se reinicia automáticamente si algo falla.
+
+#### **requirements.txt** - Lista de Dependencias
+Enumera todas las bibliotecas de Python que el proyecto necesita para funcionar (Dash, Plotly, Pandas, pydataxm, etc.) con sus versiones específicas. Es como la lista de ingredientes de una receta: antes de cocinar, necesitas tener todo en la lista.
+
+#### **portal_energetico.db** - Base de Datos SQLite
+Este es el archivo de base de datos que almacena los 580,000+ registros de métricas energéticas de los últimos 5 años. Pesa 346 MB y contiene todos los datos que el dashboard visualiza. Todos los valores ya están convertidos a GWh (gigavatios-hora) para facilitar su lectura.
+
+#### **LICENSE** - Licencia del Proyecto
+Documento legal que especifica bajo qué términos se puede usar, modificar y distribuir este código. En este caso, usa la licencia MIT que es muy permisiva.
+
+#### **README.md** - Documentación Principal
+Este mismo archivo que está leyendo. Contiene toda la documentación del proyecto: qué hace, cómo instalarlo, cómo usarlo, arquitectura del sistema, solución de problemas, etc.
+
+### 📚 Archivos de Documentación Técnica
+
+El proyecto incluye varios archivos Markdown (.md) que documentan diferentes aspectos técnicos del desarrollo:
+
+- **ARQUITECTURA_ETL_SQLITE.md**: Explica en detalle cómo funciona el sistema de extracción de datos
+- **DIAGNOSTICO_API_XM_FINAL.md**: Documenta problemas identificados con la API de XM y sus soluciones
+- **DIAGNOSTICO_CORRECTO_ETL.md**: Detalla correcciones aplicadas al sistema ETL
+- **DIAGNOSTICO_ETL_COMPLETO_20251122.md**: Diagnóstico completo del sistema realizado en noviembre 2025
+- **PLAN_ROBUSTEZ_SISTEMA.md**: Plan para hacer el sistema más robusto y tolerante a fallos
+- **IMPLEMENTACION_SISTEMA_5_ANIOS.md**: Documenta la implementación del sistema de datos históricos de 5 años
+- **IMPLEMENTACION_COMERCIALIZACION.md**: Documenta la implementación del módulo de comercialización
+- **MIGRACION_SQLITE_100_20251123.md**: Documenta la migración completa a SQLite
+- **REPORTE_VALIDACION_26NOV2025.md**: Reporte de validación del sistema en noviembre 2025
+- **REPORTE_HUECOS_XM_API.md**: Reporta huecos encontrados en los datos de la API XM
+- **CAMBIO_REORDENAMIENTO_FICHAS_26NOV2025.md**: Documenta cambios en el orden de las tarjetas KPI
+- **EXPLICACION_CALCULOS_DISTRIBUCION.md**: Explica cómo se calculan las métricas de distribución
+- **LOGGING_FORMATEO_VALORES.md**: Documenta el sistema de logging y formato de valores
+
+Estos archivos son recursos técnicos para desarrolladores y personal de mantenimiento que necesitan entender decisiones de diseño, historial de problemas resueltos, y detalles de implementación.
+
+### 🔧 Archivos de Configuración Ocultos
+
+- **.git/**: Carpeta del sistema de control de versiones Git que almacena todo el historial de cambios del proyecto
+- **.vscode/**: Configuraciones específicas del editor Visual Studio Code
+
+---
+
 ## 🤝 CONTRIBUCIÓN
 
 Las contribuciones son bienvenidas. Por favor:
