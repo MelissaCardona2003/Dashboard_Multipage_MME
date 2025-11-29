@@ -31,8 +31,16 @@ dash.register_page(__name__, path='/comercializacion', name='Comercialización',
 
 def obtener_precio_bolsa(fecha_inicio, fecha_fin):
     """Obtener datos de Precio Bolsa Nacional (datos horarios)"""
+    from utils.db_manager import get_metric_data
+    
     try:
-        df = fetch_metric_data('PrecBolsNaci', 'Sistema', fecha_inicio, fecha_fin)
+        # PASO 1: SQLite primero
+        df = get_metric_data('PrecBolsNaci', 'Sistema', fecha_inicio, fecha_fin)
+        
+        # PASO 2: Fallback a API XM si SQLite vacío
+        if df is None or df.empty:
+            logger.info("💾 SQLite sin datos, consultando API XM...")
+            df = fetch_metric_data('PrecBolsNaci', 'Sistema', fecha_inicio, fecha_fin)
         
         if df is None or df.empty:
             logger.warning("No se obtuvieron datos de PrecBolsNaci")
@@ -64,8 +72,16 @@ def obtener_precio_bolsa(fecha_inicio, fecha_fin):
 
 def obtener_precio_escasez(fecha_inicio, fecha_fin):
     """Obtener datos de Precio Escasez (datos diarios)"""
+    from utils.db_manager import get_metric_data
+    
     try:
-        df = fetch_metric_data('PrecEsca', 'Sistema', fecha_inicio, fecha_fin)
+        # PASO 1: SQLite primero
+        df = get_metric_data('PrecEsca', 'Sistema', fecha_inicio, fecha_fin)
+        
+        # PASO 2: Fallback a API XM si SQLite vacío
+        if df is None or df.empty:
+            logger.info("💾 SQLite sin datos, consultando API XM...")
+            df = fetch_metric_data('PrecEsca', 'Sistema', fecha_inicio, fecha_fin)
         
         if df is None or df.empty:
             logger.warning("No se obtuvieron datos de PrecEsca")
@@ -84,11 +100,19 @@ def obtener_precio_escasez(fecha_inicio, fecha_fin):
 
 def obtener_precio_escasez_activacion(fecha_inicio, fecha_fin):
     """Obtener datos de Precio Escasez Activación (datos diarios)"""
+    from utils.db_manager import get_metric_data
+    
     try:
-        df = fetch_metric_data('PrecEscaAct', 'Sistema', fecha_inicio, fecha_fin)
+        # PASO 1: SQLite primero
+        df = get_metric_data('PrecEscaAct', 'Sistema', fecha_inicio, fecha_fin)
+        
+        # PASO 2: Fallback a API XM si SQLite vacío
+        if df is None or df.empty:
+            logger.info("💾 SQLite sin datos, consultando API XM...")
+            df = fetch_metric_data('PrecEscaAct', 'Sistema', fecha_inicio, fecha_fin)
         
         if df is None or df.empty:
-            logger.warning("⚠️ PrecEscaAct: No hay datos disponibles en la API XM")
+            logger.warning("⚠️ PrecEscaAct: No hay datos disponibles")
             return pd.DataFrame()
         
         df['Date'] = pd.to_datetime(df['Date'])

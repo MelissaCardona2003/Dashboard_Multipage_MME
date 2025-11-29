@@ -84,9 +84,18 @@ def obtener_datos_fichas_realtime(metrica, entidad, fecha_inicio, fecha_fin):
     if isinstance(fecha_fin, date):
         fecha_fin = fecha_fin.strftime('%Y-%m-%d')
     
-    # PASO 1: Intentar API XM (tiempo real)
+    # PASO 1: SQLite primero (datos frescos, <500ms, sin timeouts)
+    logger.info(f"💾 [SQLite] Consultando {metrica}/{entidad} desde {fecha_inicio} hasta {fecha_fin}")
+    df_sqlite = get_metric_data(metrica, entidad, fecha_inicio, fecha_fin)
+    
+    if df_sqlite is not None and not df_sqlite.empty:
+        logger.info(f"✅ [SQLite] {len(df_sqlite)} registros obtenidos (ya en GWh)")
+        return df_sqlite
+    
+    # PASO 2: Fallback a API XM (solo si SQLite vacío)
+    logger.warning(f"⚠️ [SQLite] Sin datos para {metrica}/{entidad}, fallback a API XM...")
     try:
-        logger.info(f"📡 [API XM] Consultando {metrica}/{entidad} desde {fecha_inicio} hasta {fecha_fin}")
+        logger.info(f"📡 [API XM Fallback] Consultando {metrica}/{entidad}")
         df_api = fetch_metric_data(
             metric=metrica,
             entity=entidad,
@@ -109,22 +118,15 @@ def obtener_datos_fichas_realtime(metrica, entidad, fecha_inicio, fecha_fin):
                 
                 df_api['valor_gwh'] = df_api['Value'] / 1_000_000  # kWh → GWh
                 logger.info(f"✅ [API XM] {len(df_api)} registros (kWh → GWh)")
-                
                 return df_api
             else:
                 logger.warning(f"⚠️ [API XM] Datos sin columna 'Value'")
+                return None
+        else:
+            logger.error(f"❌ Sin datos disponibles para {metrica}/{entidad} (SQLite y API fallaron)")
+            return None
     except Exception as e:
-        logger.warning(f"⚠️ [API XM] Error consultando {metrica}: {e}")
-    
-    # PASO 2: Fallback a SQLite
-    logger.info(f"💾 [SQLite Fallback] Consultando {metrica}/{entidad}")
-    df_sqlite = get_metric_data(metrica, entidad, fecha_inicio, fecha_fin)
-    
-    if df_sqlite is not None and not df_sqlite.empty:
-        logger.info(f"✅ [SQLite] {len(df_sqlite)} registros obtenidos (ya en GWh)")
-        return df_sqlite
-    else:
-        logger.error(f"❌ Sin datos disponibles para {metrica}/{entidad} (API y SQLite fallaron)")
+        logger.error(f"❌ [API XM] Error consultando {metrica}: {e}")
         return None
 
 def obtener_metricas_hidricas():

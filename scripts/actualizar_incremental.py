@@ -199,6 +199,25 @@ def main():
     logger.info(f"Total registros actualizados: {total_registros}")
     logger.info(f"Fin: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info("="*60)
+    
+    # Auto-corrección automática después de cada actualización
+    logger.info("\n" + "="*60)
+    logger.info("🔧 INICIANDO AUTO-CORRECCIÓN POST-ACTUALIZACIÓN")
+    logger.info("="*60)
+    
+    try:
+        # Importar y ejecutar auto-corrección
+        from autocorreccion import AutoCorrector
+        corrector = AutoCorrector(db_path=DB_PATH, dry_run=False)
+        exito = corrector.ejecutar_todo()
+        
+        if exito:
+            logger.info("✅ Auto-corrección completada exitosamente")
+        else:
+            logger.warning("⚠️ Auto-corrección completada con advertencias")
+    except Exception as e:
+        logger.error(f"❌ Error en auto-corrección: {e}")
+        logger.info("⚠️ Continuando sin auto-corrección (actualización fue exitosa)")
 
 if __name__ == '__main__':
     main()
