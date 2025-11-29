@@ -23,10 +23,11 @@ Dashboard interactivo multi-página para monitoreo del sector energético colomb
 - ✅ **ETL Completo Semanal**: Domingos 3:00 AM - recarga 5 años de históricos
 - ✅ **Validación Automática**: Post-actualización detecta anomalías
 - ✅ **Auto-corrección Automática**: Elimina duplicados después de cada actualización (cada 6h)
-- ✅ **Base de Datos SQLite**: 1,366,002+ registros optimizados
+- ✅ **Base de Datos SQLite**: 1,366,002+ registros optimizados (5.0 GB)
 - ✅ **Alta Disponibilidad**: Servicio systemd 24/7
 - ✅ **Conversiones Verificadas**: 100% coincidencia con portal XM
 - ✅ **Documentación Automática**: Sistema con fechas para informes mensuales
+- ✅ **Base de Datos Disponible**: Descarga desde [GitHub Releases](https://github.com/MelissaCardona2003/Dashboard_Multipage_MME/releases) para pruebas locales
 
 ### **Módulos de Visualización**
 
@@ -180,8 +181,8 @@ Dashboard interactivo multi-página para monitoreo del sector energético colomb
 ✅ **Respuesta ultra-rápida**: SQLite primero (<500ms), API XM solo como fallback  
 ✅ **Sin timeouts**: 95% de consultas resueltas instantáneamente desde SQLite
 
-**📅 Última actualización:** 29 de November de 2025 - 15:59  
-*(ISO: 2025-11-29T15:59:50.504988)*  
+**📅 Última actualización:** 29 de November de 2025 - 19:09  
+*(ISO: 2025-11-29T19:09:04.067189)*  
 **Estado:** ✅ Sistema activo y optimizado  
 **Registros:** 1,366,002 | **Duplicados:** 0 | **BD:** 5,066.32 MB  
 **Capacidad:** 6 workers × 3 threads = 18 conexiones concurrentes
@@ -234,14 +235,38 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-#### **3. Inicializar Base de Datos**
+#### **3. Obtener Base de Datos**
+
+**Opción A: Descargar desde GitHub Releases (Recomendado para pruebas locales)** ⚡
+
+```bash
+# Descargar base de datos pre-construida (855 MB comprimida)
+wget https://github.com/MelissaCardona2003/Dashboard_Multipage_MME/releases/download/v1.0-db-20251129/portal_energetico.db.tar.gz
+
+# Descomprimir
+tar -xzf portal_energetico.db.tar.gz
+
+# Verificar
+ls -lh portal_energetico.db  # Debe mostrar 5.0 GB
+
+# La base de datos ya contiene:
+# - 1,366,002 registros
+# - 5 años de históricos (2020-2025)
+# - 0 duplicados
+# - Datos actualizados al 29/11/2025
+```
+
+**Opción B: Generar desde cero (para producción)**
+
 ```bash
 # Ejecutar ETL inicial (carga 5 años de datos)
 # ⚠️ IMPORTANTE: Esta ejecución toma 2-3 horas
 python3 etl/etl_xm_to_sqlite.py
 
-# Resultado: Crea portal_energetico.db con ~580,000 registros
+# Resultado: Crea portal_energetico.db con 1.3M+ registros
 ```
+
+Ver `INSTRUCCIONES_DB_RELEASE.md` para más detalles sobre la base de datos.
 
 #### **4. Configurar Servicio Systemd**
 ```bash

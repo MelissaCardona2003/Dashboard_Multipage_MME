@@ -68,3 +68,4 @@ fix_syntax.py
 .env
 config_local.py
 portal_energetico.db
+portal_energetico.db.tar.gz
