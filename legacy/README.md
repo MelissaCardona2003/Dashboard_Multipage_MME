@@ -6,7 +6,7 @@
 
 ## 🏗️ EVOLUCIÓN DEL PROYECTO
 
-### **Fase 1: Sistema Cache-Precalentamiento (Nov 2024 - Nov 2025)**
+### **Fase 1: Sistema Cache-Precalentamiento (Nov 2025)**
 
 **Arquitectura Original:**
 - Cache en disco: Archivos `.pkl` en `/var/cache/portal_energetico_cache/`
