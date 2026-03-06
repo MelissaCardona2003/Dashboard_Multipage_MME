@@ -1,34 +1,41 @@
-# Configuración OPTIMIZADA de Gunicorn para Dashboard MME
+import multiprocessing
 import os
-from dotenv import load_dotenv
+from pathlib import Path
 
-# Cargar variables de entorno desde .env
-load_dotenv()
+# Paths relativos
+BASE_DIR = Path(__file__).parent
+LOGS_DIR = BASE_DIR / "logs"
+LOGS_DIR.mkdir(exist_ok=True)
 
-bind = "0.0.0.0:8050"
+# Server socket
+bind = "127.0.0.1:8050"
+backlog = 2048
 
-# OPTIMIZADO: 6 workers para mejor rendimiento con múltiples usuarios concurrentes
-workers = 6
-
-# OPTIMIZADO: gthread permite manejar múltiples requests concurrentes por worker
+# Worker processes
+# Dash es stateful — demasiados workers causan pérdida de contexto
+# y saturan PostgreSQL sin connection pooling.
+# Con 8 vCPU: 5 workers es el balance óptimo para Dash.
+workers = 5
 worker_class = "gthread"
-threads = 3  # 3 threads por worker = 18 threads totales (6 workers × 3)
-
-# OPTIMIZADO: Timeout extendido para queries largas a API XM (5 minutos)
-timeout = 300
-
-# OPTIMIZADO: Keepalive para conexiones persistentes
-keepalive = 5
-
-# OPTIMIZADO: Límites de requests con jitter para reciclar workers (prevenir memory leaks)
+threads = 2
+worker_connections = 1000
+timeout = 120
 max_requests = 1000
 max_requests_jitter = 50
+keepalive = 5
 
-# OPTIMIZADO: preload_app desactivado (compatible con Dash callbacks)
-# El callback unificado previene ejecuciones múltiples sin necesidad de preload
-preload_app = False
+# Server mechanics
+daemon = False
+pidfile = "/tmp/gunicorn_dashboard_mme.pid"
+# user/group managed by systemd
+umask = 0
+preload_app = True
 
-# Logging mejorado
-accesslog = "-"  # stdout
-errorlog = "-"   # stderr
+# Logging
+errorlog = str(LOGS_DIR / "gunicorn_error.log")
+accesslog = str(LOGS_DIR / "gunicorn_access.log")
 loglevel = "info"
+access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s" %(D)s'
+
+# Process naming
+proc_name = "dashboard-mme"
