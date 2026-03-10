@@ -38,6 +38,13 @@ env/
 logs/
 nohup.out
 
+# Test/linters caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+
 # OS - Windows/Mac/Linux compatibility
 .DS_Store
 Thumbs.db
@@ -66,6 +73,8 @@ fix_syntax.py
 
 # Archivos de configuración local
 .env
+.env.*
+!.env.example
 config_local.py
 portal_energetico.db
 portal_energetico.db.tar.gz
@@ -101,15 +110,70 @@ backups/
 backups_migracion/
 *backup*
 *.backup
+*.sql.gz
+*.tar.gz
 E-2010-006481
+legacy_archive/
 
 # Instaladores (archivos binarios grandes)
 *.msi
 *.deb
 instaladores-offline/postgresql-packages/
 instaladores-offline/*.md
+install_packages/
+
+# Celery y Redis
+celerybeat-schedule
+celerybeat.pid
+control/
+celery_data/
+celery_results/
 
 # SIEA: Variables de entorno sensibles
 siea/.env
 siea/venv/
 siea/**/__pycache__/
+*.pyo
+
+# Base de datos SQLite (deprecada, usar PostgreSQL)
+*.db
+*.db-shm
+*.db-wal
+
+# Archivos temporales de sistema
+ystemctl*
+
+# Archivos de validación y debug temporal
+validate_fixes.sh
+test_*_debug.py
+node_modules/
+*.log
+
+# Archivo con credenciales internas
+docs/LINKS_ACCESO.md
+
+# Artefactos de ML (TensorBoard, MLflow local)
+lightning_logs/
+mlruns/
+
+# Charts generados automáticamente (bot/reportes)
+data/charts/*.png
+
+# Celery artifacts
+celerybeat-schedule
+celerybeat.pid
+
+# Resultados de experimentos offline
+experiments/results/
+experiments/*.csv
+
+# Archivos .bak
+*.bak
+
+# WhatsApp Web Service runtime
+whatsapp_bot/whatsapp-web-service/node_modules/
+whatsapp_bot/whatsapp-web-service/.wwebjs_auth/
+
+# OneDrive test files
+data/onedrive/test_*
+data/onedrive/Test_*

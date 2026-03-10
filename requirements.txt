@@ -12,6 +12,7 @@ requests==2.31.0
 python-dateutil==2.8.2
 openpyxl==3.1.2
 numpy==1.26.4
+scipy==1.11.4  # Para análisis estadístico avanzado
 geopy==2.4.1
 
 # Servidor de producción
@@ -20,17 +21,41 @@ flask==3.0.0
 
 # Monitoreo
 psutil==5.9.8
+prometheus-client==0.20.0
 
-# Base de datos PostgreSQL
-psycopg2-binary==2.9.9
+# Base de datos (SQLite nativo)
 python-dotenv==1.0.0
-sqlalchemy==2.0.23
 
 # IA y Agente Inteligente (Chat IA)
-openai==2.9.0
+openai==1.61.0  # Actualizado para soporte Groq/OpenRouter
 
 # Machine Learning para Predicciones (FASE 2)
 prophet==1.1.6
 pmdarima==2.0.4
 statsmodels==0.14.4
 scikit-learn==1.5.2
+joblib==1.3.2
+
+# API RESTful (FastAPI)
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+slowapi==0.1.9  # Rate limiting
+redis==5.0.8  # FASE 19: API predictions cache
+httpx==0.27.2  # Cliente HTTP para tests (pinned — 0.28+ breaks starlette TestClient)
+
+# Validación y configuración
+pydantic==2.5.3
+pydantic-settings==2.1.0
+
+# Testing
+pytest==7.4.4
+pytest-asyncio==0.23.3
+pytest-cov==4.1.0
+
+# Base de datos (PostgreSQL preparado)
+psycopg2-binary==2.9.9
+SQLAlchemy==2.0.25
+
+# PDF generation
+weasyprint>=60.0
