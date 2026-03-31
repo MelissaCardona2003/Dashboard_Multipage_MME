@@ -8,7 +8,7 @@
 """
 
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Tuple, Optional
+from typing import List, Tuple, Optional
 import pandas as pd
 import logging
 
@@ -128,17 +128,17 @@ class ValidadorDatos:
         """
         Normaliza el campo 'recurso' para evitar duplicados
         
-        Todas las variantes de 'Sistema' se convierten a '_SISTEMA_'
+        Todas las variantes de 'Sistema' se normalizan a 'Sistema'
         """
         if not recurso:
             return recurso
         
         recurso_limpio = recurso.strip()
         
-        # Normalizar 'Sistema' y variantes
-        if recurso_limpio.lower() == 'sistema':
+        # Normalizar 'sistema', '_SISTEMA_' y variantes → 'Sistema'
+        if recurso_limpio.lower() in ('sistema', '_sistema_'):
             self.estadisticas['normalizaciones'] += 1
-            return '_SISTEMA_'
+            return 'Sistema'
         
         return recurso_limpio
     
